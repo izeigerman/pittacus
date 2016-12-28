@@ -76,7 +76,7 @@ static int message_is_payload_valid(const uint8_t *buffer, size_t buffer_size, u
             memcmp(buffer, PROTOCOL_ID, PROTOCOL_ID_LENGTH) == 0;
 }
 
-void message_header_create(message_header_t *header, uint8_t message_type) {
+void message_header_init(message_header_t *header, uint8_t message_type) {
     memcpy(header->protocol_id, PROTOCOL_ID, PROTOCOL_ID_LENGTH);
     header->message_type = message_type;
 }

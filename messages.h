@@ -54,7 +54,7 @@ typedef struct message_data {
     uint8_t *data;
 } message_data_t;
 
-void message_header_create(message_header_t *header, uint8_t message_type);
+void message_header_init(message_header_t *header, uint8_t message_type);
 
 int message_type_decode(const uint8_t *buffer, size_t buffer_size);
 int message_hello_decode(const uint8_t *buffer, size_t buffer_size, message_hello_t *result);

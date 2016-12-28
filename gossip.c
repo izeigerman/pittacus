@@ -173,11 +173,6 @@ int gossip_recv_message(gossip_descriptor_t *self) {
     int read_result = pt_recv_from(self->socket, current_buffer, MAX_MESSAGE_SIZE, &addr, &addr_len);
     if (read_result <= 0) return read_result;
 
-    // create a new envelope.
-    message_envelope_t *new_envelope = gossip_envelope_create(self, current_buffer,
-                                                              read_result, &self->self_address);
-    if (new_envelope != NULL) gossip_envelope_enqueue(self->inbound_messages, new_envelope);
-
     // update the offset.
     self->input_buffer_offset += MAX_MESSAGE_SIZE;
     if (self->input_buffer_offset >= INPUT_BUFFER_SIZE) self->input_buffer_offset = 0;
