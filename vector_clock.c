@@ -21,7 +21,7 @@
 
 static void vector_clock_create_member_id(const cluster_member_t *member, uint8_t *result) {
     // TODO: revisit this offset. It doesn't work properly with IPv6.
-    pt_socklen_t addr_offset = member->address_len + 2; // skip length and family.
+    pt_socklen_t addr_offset = 2; // skip length and family.
     uint32_t uid_network = PT_HTONL(member->uid);
     // copy the last 8 bytes of the address and port.
     memcpy(result, member->address + addr_offset, MEMBER_ID_ADDR_SIZE);
@@ -29,7 +29,7 @@ static void vector_clock_create_member_id(const cluster_member_t *member, uint8_
     memcpy(result + MEMBER_ID_ADDR_SIZE, &uid_network, sizeof(uint32_t));
 }
 
-static int vector_clock_find_by_member_id(const vector_clock_t *clock, uint8_t *member_id) {
+static int vector_clock_find_by_member_id(const vector_clock_t *clock, const uint8_t *member_id) {
     for (int i = 0; i < clock->size; ++i) {
         if (memcmp(clock->records[i].member_id, member_id, MEMBER_ID_SIZE) == 0) return i;
     }
@@ -42,22 +42,26 @@ int vector_clock_init(vector_clock_t *clock) {
     return 0;
 }
 
-int vector_clock_increment(vector_clock_t *clock, cluster_member_t *member) {
-    uint8_t member_id[MEMBER_ID_SIZE];
-    vector_clock_create_member_id(member, member_id);
+static int vector_clock_set_by_id(vector_clock_t *clock, const uint8_t *member_id, uint32_t seq_num) {
     int idx = vector_clock_find_by_member_id(clock, member_id);
     if (idx < 0) {
         // insert or override the latest record with the new record.
         uint32_t new_idx = clock->current_idx;
         memcpy(clock->records[new_idx].member_id, member_id, MEMBER_ID_SIZE);
-        clock->records[new_idx].sequence_number = 1;
+        clock->records[new_idx].sequence_number = seq_num;
 
         if (clock->size < MAX_VECTOR_SIZE) ++clock->size;
         if (++clock->current_idx >= MAX_VECTOR_SIZE) clock->current_idx = 0;
     } else {
-        ++clock->records[idx].sequence_number;
+        clock->records[idx].sequence_number = seq_num;
     }
     return 0;
+}
+
+int vector_clock_set(vector_clock_t *clock, const cluster_member_t *member, uint32_t seq_num) {
+    uint8_t member_id[MEMBER_ID_SIZE];
+    vector_clock_create_member_id(member, member_id);
+    return vector_clock_set_by_id(clock, member_id, seq_num);
 }
 
 static vector_clock_comp_res_t vector_clock_resolve_comp_result(vector_clock_comp_res_t prev,
@@ -65,7 +69,7 @@ static vector_clock_comp_res_t vector_clock_resolve_comp_result(vector_clock_com
     return (prev != VC_EQUAL && new != prev) ? VC_CONFLICT : new;
 }
 
-vector_clock_comp_res_t vector_clock_compare(vector_clock_t *first, vector_clock_t *second) {
+vector_clock_comp_res_t vector_clock_compare_and_merge(vector_clock_t *first, const vector_clock_t *second) {
     // TODO: consider a better data structure to improve this algorithm performance.
     vector_clock_comp_res_t result = VC_EQUAL;
 
@@ -84,16 +88,24 @@ vector_clock_comp_res_t vector_clock_compare(vector_clock_t *first, vector_clock
                 result = vector_clock_resolve_comp_result(result, VC_AFTER);
             } else if (second_seq_num > first_seq_num) {
                 result = vector_clock_resolve_comp_result(result, VC_BEFORE);
+                first->records[i].sequence_number = second_seq_num;
             }
         }
-        if (result == VC_CONFLICT) return result;
     }
 
     uint32_t second_visited_mask = ((1 << second->size) - 1) & 0xFFFFFFFF;
-    if ((second_visited_idxs ^ second_visited_mask) != 0) {
+    uint32_t missing_idxs = (second_visited_idxs ^ second_visited_mask);
+    if (missing_idxs != 0) {
         // There are some records in the second clock that are missing
         // in the first one.
         result = vector_clock_resolve_comp_result(result, VC_BEFORE);
+
+        for (int i = 0; missing_idxs != 0; ++i) {
+            if ((missing_idxs & 0x01) != 0) {
+                vector_clock_set_by_id(first, second->records[i].member_id, second->records[i].sequence_number);
+            }
+            missing_idxs >>= 1;
+        }
     }
     return result;
 }

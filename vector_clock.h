@@ -42,18 +42,19 @@ typedef enum vector_clock_comp_res {
 } vector_clock_comp_res_t;
 
 int vector_clock_init(vector_clock_t *clock);
-int vector_clock_increment(vector_clock_t *clock, cluster_member_t *member);
+int vector_clock_set(vector_clock_t *clock, const cluster_member_t *member, uint32_t seq_num);
 
 /**
- * Compares 2 vector clocks.
+ * Compares 2 vector clocks and merges them into the first vector clock instance.
  *
- * @param first the first vector clock.
+ * @param first the first vector clock. This vector clock will contain the
+ *              merge result eventually.
  * @param second the second vector clock.
  * @return VC_EQUAL - if the 2 clocks are identical.
  *         VC_BEFORE - if the first clock represents the older version.
  *         VC_AFTER - if the first clock represents the newer version.
  *         VC_CONFLICT - if there is a conflict between 2 versions.
  */
-vector_clock_comp_res_t vector_clock_compare(vector_clock_t *first, vector_clock_t *second);
+vector_clock_comp_res_t vector_clock_compare_and_merge(vector_clock_t *first, const vector_clock_t *second);
 
 #endif //PITTACUS_VECTOR_CLOCK_H
