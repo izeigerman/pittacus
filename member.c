@@ -52,6 +52,35 @@ void cluster_member_destroy(cluster_member_t *result) {
     free(result->address);
 }
 
+int cluster_member_decode(const uint8_t *buffer, size_t buffer_size, cluster_member_t *member) {
+    if (buffer_size < 2 * sizeof(uint32_t) + sizeof(uint16_t)) return -1;
+    const uint8_t *cursor = buffer;
+    member->version = uint16_decode(cursor);
+    cursor += sizeof(uint16_t);
+    member->uid = uint32_decode(cursor);
+    cursor += sizeof(uint32_t);
+    member->address_len = uint32_decode(cursor);
+    cursor += sizeof(uint32_t);
+    member->address = (pt_sockaddr_storage *) cursor;
+    cursor += member->address_len;
+    return cursor - buffer;
+}
+
+int cluster_member_encode(const cluster_member_t *member, uint8_t *buffer, size_t buffer_size) {
+    if (buffer_size < 2 * sizeof(uint32_t) + sizeof(uint16_t) + member->address_len) return -1;
+    uint8_t *cursor = buffer;
+    uint16_encode(member->version, cursor);
+    cursor += sizeof(uint16_t);
+    uint32_encode(member->uid, cursor);
+    cursor += sizeof(uint32_t);
+    uint32_encode(member->address_len, cursor);
+    cursor += sizeof(uint32_t);
+    memcpy(cursor, member->address, member->address_len);
+    cursor += member->address_len;
+    return cursor - buffer;
+}
+
+
 static uint32_t cluster_member_map_idx(uint32_t capacity, uint32_t uid) {
     // TODO: should we use hash function instead?
     return uid % capacity;

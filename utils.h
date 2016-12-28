@@ -20,4 +20,9 @@
 
 uint32_t pt_random();
 
+uint16_t uint16_decode(const uint8_t *buffer);
+void uint16_encode(uint16_t n, uint8_t *buffer);
+uint32_t uint32_decode(const uint8_t *buffer);
+void uint32_encode(uint32_t n, uint8_t *buffer);
+
 #endif //PITTACUS_UTILS_H

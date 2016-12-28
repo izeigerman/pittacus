@@ -14,8 +14,28 @@
  * limitations under the License.
  */
 #include "utils.h"
+#include "network.h"
 #include <stdlib.h>
+#include <string.h>
 
 uint32_t pt_random() {
     return random();
+}
+
+uint16_t uint16_decode(const uint8_t *buffer) {
+    return PT_NTOHS(*(uint16_t *) buffer);
+}
+
+void uint16_encode(uint16_t n, uint8_t *buffer) {
+    uint16_t network_n = PT_HTONS(n);
+    memcpy(buffer, &network_n, sizeof(uint16_t));
+}
+
+uint32_t uint32_decode(const uint8_t *buffer) {
+    return PT_NTOHL(*(uint32_t *) buffer);
+}
+
+void uint32_encode(uint32_t n, uint8_t *buffer) {
+    uint32_t network_n = PT_HTONL(n);
+    memcpy(buffer, &network_n, sizeof(uint32_t));
 }

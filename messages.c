@@ -18,53 +18,10 @@
 #include <string.h>
 #include "messages.h"
 #include "network.h"
+#include "utils.h"
 
 
 #define RETURN_IF_INVALID_PAYLOAD(t, r) if (!message_is_payload_valid(buffer, buffer_size, (t))) return r;
-
-static uint16_t uint16_decode(const uint8_t *buffer) {
-    return PT_NTOHS(*(uint16_t *) buffer);
-}
-
-static void uint16_encode(uint16_t n, uint8_t *buffer) {
-    uint16_t network_n = PT_HTONS(n);
-    memcpy(buffer, &network_n, sizeof(uint16_t));
-}
-
-static uint32_t uint32_decode(const uint8_t *buffer) {
-    return PT_NTOHL(*(uint32_t *) buffer);
-}
-
-static void uint32_encode(uint32_t n, uint8_t *buffer) {
-    uint32_t network_n = PT_HTONL(n);
-    memcpy(buffer, &network_n, sizeof(uint32_t));
-}
-
-static int cluster_member_decode(const uint8_t *buffer, cluster_member_t *member) {
-    const uint8_t *cursor = buffer;
-    member->version = uint16_decode(cursor);
-    cursor += sizeof(uint16_t);
-    member->uid = uint32_decode(cursor);
-    cursor += sizeof(uint32_t);
-    member->address_len = uint32_decode(cursor);
-    cursor += sizeof(uint32_t);
-    member->address = (pt_sockaddr_storage *) cursor;
-    cursor += member->address_len;
-    return cursor - buffer;
-}
-
-static int cluster_member_encode(const cluster_member_t *member, uint8_t *buffer) {
-    uint8_t *cursor = buffer;
-    uint16_encode(member->version, cursor);
-    cursor += sizeof(uint16_t);
-    uint32_encode(member->uid, cursor);
-    cursor += sizeof(uint32_t);
-    uint32_encode(member->address_len, cursor);
-    cursor += sizeof(uint32_t);
-    memcpy(cursor, member->address, member->address_len);
-    cursor += member->address_len;
-    return cursor - buffer;
-}
 
 int message_type_decode(const uint8_t *buffer, size_t buffer_size) {
     if (buffer_size < sizeof(message_header_t)) return -1;
@@ -102,7 +59,11 @@ int message_hello_decode(const uint8_t *buffer, size_t buffer_size, message_hell
 
     message_header_decode(buffer, buffer_size, &result->header);
     result->this_member = (cluster_member_t *) malloc(sizeof(cluster_member_t));
-    int member_bytes = cluster_member_decode(buffer + sizeof(message_header_t), result->this_member);
+
+    int member_bytes = cluster_member_decode(buffer + sizeof(message_header_t),
+                                             buffer_size - sizeof(message_header_t),
+                                             result->this_member);
+    if (member_bytes < 0) return member_bytes;
     return sizeof(message_header_t) + member_bytes;
 }
 
@@ -115,7 +76,8 @@ int message_hello_encode(const message_hello_t *msg, uint8_t *buffer, size_t buf
     if (encode_result < 0) return -1;
 
     uint8_t *cursor = buffer + encode_result;
-    cursor += cluster_member_encode(msg->this_member, cursor);
+    const uint8_t *buffer_end = buffer + buffer_size;
+    cursor += cluster_member_encode(msg->this_member, cursor, buffer_end - cursor);
 
     return cursor - buffer;
 }
@@ -186,8 +148,9 @@ int message_member_list_decode(const uint8_t *buffer, size_t buffer_size, messag
 
     result->members = (cluster_member_t *) malloc(result->members_n * sizeof(cluster_member_t));
 
+    const uint8_t *buffer_end = buffer + buffer_size;
     for (int i = 0; i < result->members_n; ++i) {
-        cursor += cluster_member_decode(cursor, &result->members[i]);
+        cursor += cluster_member_decode(cursor, buffer_end - cursor, &result->members[i]);
     }
 
     return cursor - buffer;
@@ -205,8 +168,9 @@ int message_member_list_encode(const message_member_list_t *msg, uint8_t *buffer
     uint16_encode(msg->members_n, cursor);
     cursor += sizeof(uint16_t);
 
+    const uint8_t *buffer_end = buffer + buffer_size;
     for (int i = 0; i < msg->members_n; ++i) {
-        cursor += cluster_member_encode(&msg->members[i], cursor);
+        cursor += cluster_member_encode(&msg->members[i], cursor, buffer_end - cursor);
     }
     return cursor - buffer;
 }

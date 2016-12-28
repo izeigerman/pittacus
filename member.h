@@ -31,6 +31,9 @@ int cluster_member_copy(cluster_member_t *dst, cluster_member_t *src);
 int cluster_member_equals(cluster_member_t *first, cluster_member_t *second);
 void cluster_member_destroy(cluster_member_t *result);
 
+int cluster_member_decode(const uint8_t *buffer, size_t buffer_size, cluster_member_t *member);
+int cluster_member_encode(const cluster_member_t *member, uint8_t *buffer, size_t buffer_size);
+
 typedef struct cluster_member_map {
     cluster_member_t **map;
     uint32_t size;
