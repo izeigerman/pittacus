@@ -123,7 +123,7 @@ void cluster_member_map_destroy(cluster_member_map_t *members) {
 }
 
 int cluster_member_map_remove(cluster_member_map_t *members, cluster_member_t *member) {
-    if (members->size == 0) return NULL;
+    if (members->size == 0) return -1;
     uint32_t seen = 0;
     uint32_t idx = cluster_member_map_idx(members->capacity, member->uid);
     while (seen < members->capacity && members->map[idx] != NULL) {
@@ -153,9 +153,17 @@ cluster_member_t *cluster_member_map_find_by_uid(cluster_member_map_t *members, 
 
 cluster_member_t *cluster_member_map_random_member(cluster_member_map_t *members) {
     if (members->size == 0) return NULL;
-    uint32_t idx = pt_random() % members->capacity;
+    int idx = (pt_random() % (2 * members->capacity)) - members->capacity;
+    if (idx <= -members->capacity) idx = -(members->capacity - 1);
+
+    int step = 0;
+    if (idx < 0) step = -1; else step = 1;
+    idx = abs(idx);
+
     while (members->map[idx] == NULL) {
-        if (++idx >= members->capacity) idx = 0;
+        idx += step;
+        if (idx >= members->capacity) idx = 0;
+        else if (idx < 0) idx = members->capacity - 1;
     }
     return members->map[idx];
 }
