@@ -17,9 +17,11 @@
 #include <string.h>
 #include "member.h"
 #include "config.h"
+#include "utils.h"
 
 static const uint32_t MEMBERS_INITIAL_CAPACITY = 32;
-static const uint8_t MEMBERS_LOAD_FACTOR = 2;
+static const uint8_t MEMBERS_EXTENSION_FACTOR = 2;
+static const double MEMBERS_LOAD_FACTOR = 0.75;
 
 int cluster_member_init(cluster_member_t *result, uint32_t uid, pt_sockaddr_storage *address, pt_socklen_t address_len) {
     result->uid = uid;
@@ -41,8 +43,8 @@ int cluster_member_copy(cluster_member_t *dst, cluster_member_t *src) {
 
 int cluster_member_equals(cluster_member_t *first, cluster_member_t *second) {
     return first->uid == second->uid &&
-            first->version != second->version &&
-            first->address_len != second->address_len &&
+            first->version == second->version &&
+            first->address_len == second->address_len &&
             memcmp(first->address, second->address, first->address_len) == 0;
 }
 
@@ -51,11 +53,13 @@ void cluster_member_destroy(cluster_member_t *result) {
 }
 
 static uint32_t cluster_member_map_idx(uint32_t capacity, uint32_t uid) {
+    // TODO: should we use hash function instead?
     return uid % capacity;
 }
 
-static cluster_member_map_t *cluster_member_map_extend(cluster_member_map_t *members) {
-    uint32_t new_capacity = members->capacity * MEMBERS_LOAD_FACTOR;
+static cluster_member_map_t *cluster_member_map_extend(cluster_member_map_t *members, uint32_t required_size) {
+    uint32_t new_capacity = members->capacity;
+    while (required_size >= new_capacity * MEMBERS_LOAD_FACTOR) new_capacity *= MEMBERS_EXTENSION_FACTOR;
     cluster_member_t **new_member_map = (cluster_member_t **) calloc(new_capacity, sizeof(cluster_member_t *));
     for (int i = 0; i < members->capacity; ++i) {
         if (members->map[i] != NULL) {
@@ -79,12 +83,15 @@ int cluster_member_map_init(cluster_member_map_t *members) {
 }
 
 int cluster_member_map_put(cluster_member_map_t *members, cluster_member_t *new_members, size_t new_members_size) {
-    if (members->size + new_members_size >= members->capacity) cluster_member_map_extend(members);
+    uint32_t new_size = members->size + new_members_size;
+    // increase the capacity of the map if the new size is >= 0.75 of the current capacity.
+    if (new_size >= members->capacity * MEMBERS_LOAD_FACTOR) cluster_member_map_extend(members, new_size);
+
     for (cluster_member_t *current = new_members; current < new_members + new_members_size; ++current) {
         cluster_member_t *new_member = (cluster_member_t *) malloc(sizeof(cluster_member_t));
         cluster_member_copy(new_member, current);
         uint32_t idx = cluster_member_map_idx(members->capacity, new_member->uid);
-        while (members->map[idx] != NULL && members->map[idx]->uid != new_member->uid) {
+        while (members->map[idx] != NULL && !cluster_member_equals(members->map[idx], new_member)) {
             ++idx;
             if (idx >= members->capacity) idx = 0;
         }
@@ -116,6 +123,7 @@ void cluster_member_map_destroy(cluster_member_map_t *members) {
 }
 
 int cluster_member_map_remove(cluster_member_map_t *members, cluster_member_t *member) {
+    if (members->size == 0) return NULL;
     uint32_t seen = 0;
     uint32_t idx = cluster_member_map_idx(members->capacity, member->uid);
     while (seen < members->capacity && members->map[idx] != NULL) {
@@ -132,6 +140,7 @@ int cluster_member_map_remove(cluster_member_map_t *members, cluster_member_t *m
 }
 
 cluster_member_t *cluster_member_map_find_by_uid(cluster_member_map_t *members, uint32_t uid) {
+    if (members->size == 0) return NULL;
     uint32_t seen = 0;
     uint32_t idx = cluster_member_map_idx(members->capacity, uid);
     while (seen < members->capacity && members->map[idx] != NULL) {
@@ -142,3 +151,11 @@ cluster_member_t *cluster_member_map_find_by_uid(cluster_member_map_t *members, 
     return NULL;
 }
 
+cluster_member_t *cluster_member_map_random_member(cluster_member_map_t *members) {
+    if (members->size == 0) return NULL;
+    uint32_t idx = pt_random() % members->capacity;
+    while (members->map[idx] == NULL) {
+        if (++idx >= members->capacity) idx = 0;
+    }
+    return members->map[idx];
+}

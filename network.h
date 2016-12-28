@@ -13,8 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#ifndef PITTACUS_UTILS_H
-#define PITTACUS_UTILS_H
+#ifndef PITTACUS_NETWORK_UTILS_H
+#define PITTACUS_NETWORK_UTILS_H
 
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -43,4 +43,4 @@ ssize_t pt_recv_from(pt_socket_fd fd, uint8_t *buffer, size_t buffer_size, pt_so
 ssize_t pt_send_to(pt_socket_fd fd, const uint8_t *buffer, size_t buffer_size, const pt_sockaddr_storage *addr, pt_socklen_t addr_len);
 void pt_close(pt_socket_fd fd);
 
-#endif //PITTACUS_UTILS_H
+#endif //PITTACUS_NETWORK_UTILS_H
