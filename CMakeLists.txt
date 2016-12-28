@@ -18,5 +18,5 @@ project(pittacus)
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
 
-set(SOURCE_FILES main.c messages.c member.c config.c gossip.c network.c utils.c)
+set(SOURCE_FILES main.c messages.c member.c config.c gossip.c network.c utils.c vector_clock.c)
 add_executable(pittacus ${SOURCE_FILES})
