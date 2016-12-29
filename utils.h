@@ -25,4 +25,9 @@ void uint16_encode(uint16_t n, uint8_t *buffer);
 uint32_t uint32_decode(const uint8_t *buffer);
 void uint32_encode(uint32_t n, uint8_t *buffer);
 
+typedef enum pt_bool {
+    PT_FALSE = 0,
+    PT_TRUE = 1
+} pt_bool_t;
+
 #endif //PITTACUS_UTILS_H

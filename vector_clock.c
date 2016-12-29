@@ -15,7 +15,6 @@
  */
 #include "vector_clock.h"
 #include "network.h"
-#include "utils.h"
 #include <string.h>
 
 #define MEMBER_ID_ADDR_SIZE MEMBER_ID_SIZE - 4
@@ -85,8 +84,34 @@ static vector_clock_comp_res_t vector_clock_resolve_comp_result(vector_clock_com
     return (prev != VC_EQUAL && new != prev) ? VC_CONFLICT : new;
 }
 
-vector_clock_comp_res_t vector_clock_compare_and_merge(vector_clock_t *first, const vector_clock_t *second) {
-    // TODO: consider a better data structure to improve this algorithm performance.
+vector_clock_comp_res_t vector_clock_compare_with_record(vector_clock_t *clock,
+                                                         const vector_record_t *record,
+                                                         pt_bool_t merge) {
+    vector_clock_comp_res_t result = VC_EQUAL;
+    int idx = vector_clock_find_by_member_id(clock, record->member_id);
+    if (idx < 0) {
+        result = VC_BEFORE;
+        if (merge) {
+            vector_clock_set_by_id(clock, record->member_id, record->sequence_number);
+        }
+    } else {
+        uint32_t first_seq_num = clock->records[idx].sequence_number;
+        uint32_t second_seq_num = record->sequence_number;
+        if (first_seq_num > second_seq_num) {
+            result = VC_AFTER;
+        } else if (first_seq_num < second_seq_num) {
+            result = VC_BEFORE;
+            if (merge) {
+                clock->records[idx].sequence_number = second_seq_num;
+            }
+        }
+    }
+    return result;
+}
+
+vector_clock_comp_res_t vector_clock_compare(vector_clock_t *first,
+                                             const vector_clock_t *second,
+                                             pt_bool_t merge) {
     vector_clock_comp_res_t result = VC_EQUAL;
 
     uint32_t second_visited_idxs = 0;
@@ -104,7 +129,9 @@ vector_clock_comp_res_t vector_clock_compare_and_merge(vector_clock_t *first, co
                 result = vector_clock_resolve_comp_result(result, VC_AFTER);
             } else if (second_seq_num > first_seq_num) {
                 result = vector_clock_resolve_comp_result(result, VC_BEFORE);
-                first->records[i].sequence_number = second_seq_num;
+                if (merge) {
+                    first->records[i].sequence_number = second_seq_num;
+                }
             }
         }
     }
@@ -116,11 +143,14 @@ vector_clock_comp_res_t vector_clock_compare_and_merge(vector_clock_t *first, co
         // in the first one.
         result = vector_clock_resolve_comp_result(result, VC_BEFORE);
 
-        for (int i = 0; missing_idxs != 0; ++i) {
-            if ((missing_idxs & 0x01) != 0) {
-                vector_clock_set_by_id(first, second->records[i].member_id, second->records[i].sequence_number);
+        if (merge) {
+            for (int i = 0; missing_idxs != 0; ++i) {
+                if ((missing_idxs & 0x01) != 0) {
+                    vector_clock_set_by_id(first, second->records[i].member_id,
+                                           second->records[i].sequence_number);
+                }
+                missing_idxs >>= 1;
             }
-            missing_idxs >>= 1;
         }
     }
     return result;
