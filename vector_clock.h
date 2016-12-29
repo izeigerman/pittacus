@@ -20,7 +20,6 @@
 #include "member.h"
 
 #define MAX_VECTOR_SIZE 20
-
 #define MEMBER_ID_SIZE 12
 
 typedef struct vector_record {
@@ -43,6 +42,7 @@ typedef enum vector_clock_comp_res {
 
 int vector_clock_init(vector_clock_t *clock);
 int vector_clock_set(vector_clock_t *clock, const cluster_member_t *member, uint32_t seq_num);
+int vector_clock_increment(vector_clock_t *clock, const cluster_member_t *member);
 
 /**
  * Compares 2 vector clocks and merges them into the first vector clock instance.

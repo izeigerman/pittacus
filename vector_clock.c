@@ -58,6 +58,15 @@ static int vector_clock_set_by_id(vector_clock_t *clock, const uint8_t *member_i
     return 0;
 }
 
+int vector_clock_increment(vector_clock_t *clock, const cluster_member_t *member) {
+    uint8_t member_id[MEMBER_ID_SIZE];
+    vector_clock_create_member_id(member, member_id);
+    int idx = vector_clock_find_by_member_id(clock, member_id);
+    if (idx < 0) return idx;
+    ++clock->records[idx].sequence_number;
+    return 0;
+}
+
 int vector_clock_set(vector_clock_t *clock, const cluster_member_t *member, uint32_t seq_num) {
     uint8_t member_id[MEMBER_ID_SIZE];
     vector_clock_create_member_id(member, member_id);
