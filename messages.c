@@ -120,30 +120,44 @@ int message_data_decode(const uint8_t *buffer, size_t buffer_size, message_data_
     RETURN_IF_INVALID_PAYLOAD(MESSAGE_DATA_TYPE, -1);
 
     const uint8_t *cursor = buffer;
+    const uint8_t *buffer_end = buffer + buffer_size;
 
-    if (message_header_decode(cursor, buffer_size, &result->header) < 0) return -1;
-    cursor += sizeof(message_header_t);
+    int decode_result = message_header_decode(cursor, buffer_size, &result->header);
+    if (decode_result < 0) return decode_result;
+    cursor += decode_result;
+
+    decode_result = vector_clock_record_decode(cursor, buffer_end - cursor, &result->data_version);
+    if (decode_result < 0) return decode_result;
+    cursor += decode_result;
 
     result->data_size = uint32_decode(cursor);
     cursor += sizeof(uint32_t);
 
-    size_t base_size = sizeof(message_header_t) + sizeof(uint32_t);
+    size_t base_size = sizeof(message_header_t) + sizeof(vector_record_t) + sizeof(uint32_t);
     size_t expected_size = base_size + result->data_size;
     if (buffer_size != expected_size) return -1;
 
     uint8_t *data_cursor = result->data_size > 0 ? (uint8_t *) cursor : NULL;
     result->data = data_cursor;
+    cursor += result->data_size;
 
-    return (cursor + result->data_size) - buffer;
+    return cursor - buffer;
 }
 
 int message_data_encode(const message_data_t *msg, uint8_t *buffer, size_t buffer_size) {
-    if (buffer_size < sizeof(message_header_t) + sizeof(uint32_t) + msg->data_size) return -1;
+    size_t min_size = sizeof(message_header_t) + sizeof(vector_record_t) + sizeof(uint32_t) + msg->data_size;
+    if (buffer_size < min_size) return -1;
 
-    int encode_result = message_header_encode(&msg->header, buffer, buffer_size);
-    if (encode_result < 0) return -1;
+    uint8_t *cursor = buffer;
+    const uint8_t *buffer_end = buffer + buffer_size;
 
-    uint8_t *cursor = buffer + encode_result;
+    int encode_result = message_header_encode(&msg->header, cursor, buffer_size);
+    if (encode_result < 0) return encode_result;
+    cursor += encode_result;
+
+    encode_result = vector_clock_record_encode(&msg->data_version, cursor, buffer_end - cursor);
+    if (encode_result < 0) return encode_result;
+    cursor += encode_result;
 
     uint32_encode(msg->data_size, cursor);
     cursor += sizeof(uint32_t);

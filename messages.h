@@ -18,6 +18,7 @@
 
 #include "config.h"
 #include "member.h"
+#include "vector_clock.h"
 
 typedef struct message_header {
     char protocol_id[PROTOCOL_ID_LENGTH];
@@ -53,6 +54,7 @@ typedef struct message_ack {
 #define MESSAGE_DATA_TYPE 0x05
 typedef struct message_data {
     message_header_t header;
+    vector_record_t data_version;
     uint32_t data_size;
     uint8_t *data;
 } message_data_t;
