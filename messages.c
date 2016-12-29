@@ -33,22 +33,41 @@ static int message_is_payload_valid(const uint8_t *buffer, size_t buffer_size, u
             memcmp(buffer, PROTOCOL_ID, PROTOCOL_ID_LENGTH) == 0;
 }
 
-void message_header_init(message_header_t *header, uint8_t message_type) {
+void message_header_init(message_header_t *header, uint8_t message_type, uint32_t sequence_number) {
     memcpy(header->protocol_id, PROTOCOL_ID, PROTOCOL_ID_LENGTH);
     header->message_type = message_type;
+    header->reserved = 0;
+    header->sequence_num = sequence_number;
 }
 
 static int message_header_encode(const message_header_t *msg, uint8_t *buffer, size_t buffer_size) {
     if (buffer_size < sizeof(struct message_header)) return -1;
     memcpy(buffer, msg->protocol_id, PROTOCOL_ID_LENGTH);
-    *(buffer + PROTOCOL_ID_LENGTH) = msg->message_type;
+
+    uint8_t *cursor = buffer + PROTOCOL_ID_LENGTH;
+    *cursor = msg->message_type;
+    cursor += sizeof(uint8_t);
+
+    uint16_encode(msg->reserved, cursor);
+    cursor += sizeof(uint16_t);
+
+    uint32_encode(msg->sequence_num, cursor);
     return sizeof(struct message_header);
 }
 
 static int message_header_decode(const uint8_t *buffer, size_t buffer_size, message_header_t *result) {
     if (buffer_size < sizeof(struct message_header)) return -1;
     memcpy(result->protocol_id, buffer, PROTOCOL_ID_LENGTH);
-    result->message_type = *(buffer + PROTOCOL_ID_LENGTH);
+
+    const uint8_t *cursor = buffer + PROTOCOL_ID_LENGTH;
+
+    result->message_type = *cursor;
+    cursor += sizeof(uint8_t);
+
+    result->reserved = uint16_decode(cursor);
+    cursor += sizeof(uint16_t);
+
+    result->sequence_num = uint32_decode(cursor);
     return sizeof(struct message_header);
 }
 
@@ -177,4 +196,32 @@ int message_member_list_encode(const message_member_list_t *msg, uint8_t *buffer
 
 void message_member_list_destroy(const message_member_list_t *msg) {
     free(msg->members);
+}
+
+int message_ack_decode(const uint8_t *buffer, size_t buffer_size, message_ack_t *result) {
+    RETURN_IF_INVALID_PAYLOAD(MESSAGE_ACK_TYPE, -1);
+    if (buffer_size < sizeof(message_header_t) + sizeof(uint32_t)) return -1;
+
+    const uint8_t *cursor = buffer;
+
+    if (message_header_decode(cursor, buffer_size, &result->header) < 0) return -1;
+    cursor += sizeof(message_header_t);
+
+    result->ack_sequence_num = uint32_decode(cursor);
+    cursor += sizeof(uint32_t);
+
+    return cursor - buffer;
+}
+
+int message_ack_encode(const message_ack_t *msg, uint8_t *buffer, size_t buffer_size) {
+    if (buffer_size < sizeof(message_header_t) + sizeof(uint32_t)) return -1;
+
+    int encode_result = message_header_encode(&msg->header, buffer, buffer_size);
+    if (encode_result < 0) return -1;
+
+    uint8_t *cursor = buffer + encode_result;
+    uint32_encode(msg->ack_sequence_num, cursor);
+    cursor += sizeof(uint32_t);
+
+    return cursor - buffer;
 }

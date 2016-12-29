@@ -22,6 +22,8 @@
 typedef struct message_header {
     char protocol_id[PROTOCOL_ID_LENGTH];
     uint8_t message_type;
+    uint16_t reserved;
+    uint32_t sequence_num;
 } message_header_t;
 
 #define MESSAGE_HELLO_TYPE 0x01
@@ -45,6 +47,7 @@ typedef struct message_member_list {
 #define MESSAGE_ACK_TYPE 0x04
 typedef struct message_ack {
     message_header_t header;
+    uint32_t ack_sequence_num;
 } message_ack_t;
 
 #define MESSAGE_DATA_TYPE 0x05
@@ -54,13 +57,14 @@ typedef struct message_data {
     uint8_t *data;
 } message_data_t;
 
-void message_header_init(message_header_t *header, uint8_t message_type);
+void message_header_init(message_header_t *header, uint8_t message_type, uint32_t sequence_number);
 
 int message_type_decode(const uint8_t *buffer, size_t buffer_size);
 int message_hello_decode(const uint8_t *buffer, size_t buffer_size, message_hello_t *result);
 int message_welcome_decode(const uint8_t *buffer, size_t buffer_size, message_welcome_t *result);
 int message_data_decode(const uint8_t *buffer, size_t buffer_size, message_data_t *result);
 int message_member_list_decode(const uint8_t *buffer, size_t buffer_size, message_member_list_t *result);
+int message_ack_decode(const uint8_t *buffer, size_t buffer_size, message_ack_t *result);
 
 void message_hello_destroy(const message_hello_t *msg);
 void message_member_list_destroy(const message_member_list_t *msg);
@@ -69,5 +73,6 @@ int message_hello_encode(const message_hello_t *msg, uint8_t *buffer, size_t buf
 int message_welcome_encode(const message_welcome_t *msg, uint8_t *buffer, size_t buffer_size);
 int message_data_encode(const message_data_t *msg, uint8_t *buffer, size_t buffer_size);
 int message_member_list_encode(const message_member_list_t *msg, uint8_t *buffer, size_t buffer_size);
+int message_ack_encode(const message_ack_t *msg, uint8_t *buffer, size_t buffer_size);
 
 #endif //PITTACUS_MESSAGES_H
