@@ -41,6 +41,7 @@ typedef enum vector_clock_comp_res {
 } vector_clock_comp_res_t;
 
 int vector_clock_init(vector_clock_t *clock);
+vector_record_t *vector_clock_find_record(vector_clock_t *clock, const cluster_member_t *member);
 int vector_clock_set(vector_clock_t *clock, const cluster_member_t *member, uint32_t seq_num);
 int vector_clock_increment(vector_clock_t *clock, const cluster_member_t *member);
 
@@ -56,5 +57,8 @@ int vector_clock_increment(vector_clock_t *clock, const cluster_member_t *member
  *         VC_CONFLICT - if there is a conflict between 2 versions.
  */
 vector_clock_comp_res_t vector_clock_compare_and_merge(vector_clock_t *first, const vector_clock_t *second);
+
+int vector_clock_record_decode(const uint8_t *buffer, size_t buffer_size, vector_record_t *result);
+int vector_clock_record_encode(const vector_record_t *record, uint8_t *buffer, size_t buffer_size);
 
 #endif //PITTACUS_VECTOR_CLOCK_H

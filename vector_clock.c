@@ -15,6 +15,7 @@
  */
 #include "vector_clock.h"
 #include "network.h"
+#include "utils.h"
 #include <string.h>
 
 #define MEMBER_ID_ADDR_SIZE MEMBER_ID_SIZE - 4
@@ -24,7 +25,7 @@ static void vector_clock_create_member_id(const cluster_member_t *member, uint8_
     pt_socklen_t addr_offset = 2; // skip length and family.
     uint32_t uid_network = PT_HTONL(member->uid);
     // copy the last 8 bytes of the address and port.
-    memcpy(result, member->address + addr_offset, MEMBER_ID_ADDR_SIZE);
+    memcpy(result, ((uint8_t *) member->address + addr_offset), MEMBER_ID_ADDR_SIZE);
     // fill the remaining 4 bytes with member's uid.
     memcpy(result + MEMBER_ID_ADDR_SIZE, &uid_network, sizeof(uint32_t));
 }
@@ -34,6 +35,14 @@ static int vector_clock_find_by_member_id(const vector_clock_t *clock, const uin
         if (memcmp(clock->records[i].member_id, member_id, MEMBER_ID_SIZE) == 0) return i;
     }
     return -1;
+}
+
+vector_record_t *vector_clock_find_record(vector_clock_t *clock, const cluster_member_t *member) {
+    uint8_t member_id[MEMBER_ID_SIZE];
+    vector_clock_create_member_id(member, member_id);
+    int idx = vector_clock_find_by_member_id(clock, member_id);
+    if (idx < 0) return NULL;
+    return &clock->records[idx];
 }
 
 int vector_clock_init(vector_clock_t *clock) {
@@ -59,11 +68,9 @@ static int vector_clock_set_by_id(vector_clock_t *clock, const uint8_t *member_i
 }
 
 int vector_clock_increment(vector_clock_t *clock, const cluster_member_t *member) {
-    uint8_t member_id[MEMBER_ID_SIZE];
-    vector_clock_create_member_id(member, member_id);
-    int idx = vector_clock_find_by_member_id(clock, member_id);
-    if (idx < 0) return idx;
-    ++clock->records[idx].sequence_number;
+    vector_record_t *record = vector_clock_find_record(clock, member);
+    if (record == NULL) return -1;
+    ++record->sequence_number;
     return 0;
 }
 
@@ -117,4 +124,30 @@ vector_clock_comp_res_t vector_clock_compare_and_merge(vector_clock_t *first, co
         }
     }
     return result;
+}
+
+int vector_clock_record_decode(const uint8_t *buffer, size_t buffer_size, vector_record_t *result) {
+    if (buffer_size < sizeof(vector_record_t)) return -1;
+
+    const uint8_t *cursor = buffer;
+    result->sequence_number = uint32_decode(cursor);
+    cursor += sizeof(uint32_t);
+
+    memcpy(result->member_id, cursor, MEMBER_ID_SIZE);
+    cursor += MEMBER_ID_SIZE;
+
+    return cursor - buffer;
+}
+
+int vector_clock_record_encode(const vector_record_t *record, uint8_t *buffer, size_t buffer_size) {
+    if (buffer_size < sizeof(vector_record_t)) return -1;
+
+    uint8_t *cursor = buffer;
+    uint32_encode(record->sequence_number, cursor);
+    cursor += sizeof(uint32_t);
+
+    memcpy(cursor, record->member_id, MEMBER_ID_SIZE);
+    cursor += MEMBER_ID_SIZE;
+
+    return cursor - buffer;
 }
