@@ -63,13 +63,18 @@ typedef struct gossip_descriptor {
     void *data_receiver_context;
 } gossip_descriptor_t;
 
+typedef struct seed_node {
+    const pt_sockaddr *addr;
+    socklen_t addr_len;
+} seed_node_t;
+
 int gossip_init(gossip_descriptor_t *self,
                 const pt_sockaddr *self_addr, socklen_t self_addr_len,
                 data_receiver_t data_receiver, void *data_receiver_context);
 
 int gossip_destroy(gossip_descriptor_t *self);
 
-
+int gossip_join(gossip_descriptor_t *self, const seed_node_t *seed_nodes, uint16_t seed_nodes_len);
 
 int gossip_process_receive(gossip_descriptor_t *self);
 

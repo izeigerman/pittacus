@@ -36,6 +36,8 @@ typedef struct message_hello {
 #define MESSAGE_WELCOME_TYPE 0x02
 typedef struct message_welcome {
     message_header_t header;
+    uint32_t hello_sequence_num;
+    cluster_member_t *this_member;
 } message_welcome_t;
 
 #define MESSAGE_MEMBER_LIST_TYPE 0x03
@@ -69,6 +71,7 @@ int message_member_list_decode(const uint8_t *buffer, size_t buffer_size, messag
 int message_ack_decode(const uint8_t *buffer, size_t buffer_size, message_ack_t *result);
 
 void message_hello_destroy(const message_hello_t *msg);
+void message_welcome_destroy(const message_welcome_t *msg);
 void message_member_list_destroy(const message_member_list_t *msg);
 
 int message_hello_encode(const message_hello_t *msg, uint8_t *buffer, size_t buffer_size);

@@ -18,7 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define RETURN_IF_NOT_CONNECTED(state) if (state != STATE_CONNECTED) return -3;
+#define RETURN_IF_NOT_CONNECTED(state) if ((state) != STATE_CONNECTED) return -3;
 
 typedef struct message_envelope_in {
     const pt_sockaddr_storage *sender;
@@ -233,10 +233,13 @@ static int gossip_enqueue_ack(gossip_descriptor_t *self,
 }
 
 static int gossip_enqueue_welcome(gossip_descriptor_t *self,
+                                  uint32_t hello_sequence_num,
                                   const pt_sockaddr_storage *recipient,
                                   pt_socklen_t recipient_len) {
     message_welcome_t welcome_msg;
     message_header_init(&welcome_msg.header, MESSAGE_WELCOME_TYPE, 0);
+    welcome_msg.hello_sequence_num = hello_sequence_num;
+    welcome_msg.this_member = &self->self_address;
     return gossip_enqueue_message(self, MESSAGE_WELCOME_TYPE, &welcome_msg,
                                   recipient, recipient_len);
 }
@@ -308,7 +311,7 @@ static int gossip_handle_hello(gossip_descriptor_t *self, const message_envelope
     cluster_member_map_put(&self->members, msg.this_member, 1);
 
     // Send back a Welcome message.
-    gossip_enqueue_welcome(self, envelope_in->sender, envelope_in->sender_len);
+    gossip_enqueue_welcome(self, msg.header.sequence_num, envelope_in->sender, envelope_in->sender_len);
 
     // Send some portion of known members to a newcomer node.
     gossip_enqueue_member_list(self, envelope_in->sender, envelope_in->sender_len);
@@ -323,6 +326,18 @@ static int gossip_handle_welcome(gossip_descriptor_t *self, const message_envelo
     message_welcome_t msg;
     if (message_welcome_decode(envelope_in->buffer, envelope_in->buffer_size, &msg) < 0) return -1;
     self->state = STATE_CONNECTED;
+
+    // Now when the seed node responded we can
+    // safely add it to the list of known members.
+    cluster_member_map_put(&self->members, msg.this_member, 1);
+
+    // Remove the hello message from the outbound queue.
+    message_envelope_out_t *hello_envelope =
+            gossip_envelope_find_by_sequence_num(&self->outbound_messages,
+                                                 msg.hello_sequence_num);
+    if (hello_envelope != NULL) gossip_envelope_remove(&self->outbound_messages, hello_envelope);
+
+    message_welcome_destroy(&msg);
     return 0;
 }
 
@@ -436,7 +451,25 @@ int gossip_destroy(gossip_descriptor_t *self) {
     return 0;
 }
 
+int gossip_join(gossip_descriptor_t *self, const seed_node_t *seed_nodes, uint16_t seed_nodes_len) {
+    if (self->state != STATE_INITIALIZED) return -1;
+    if (seed_nodes == NULL || seed_nodes_len == 0) {
+        // No seed nodes were provided.
+        self->state = STATE_CONNECTED;
+    } else {
+        for (int i = 0; i < seed_nodes_len; ++i) {
+            seed_node_t node = seed_nodes[i];
+            int res = gossip_enqueue_hello(self, (const pt_sockaddr_storage *) node.addr, node.addr_len);
+            if (res < 0) return res;
+        }
+        self->state = STATE_JOINING;
+    }
+    return 0;
+}
+
 int gossip_process_receive(gossip_descriptor_t *self) {
+    if (self->state != STATE_JOINING && self->state != STATE_CONNECTED) return -3;
+
     pt_sockaddr_storage addr;
     pt_socklen_t addr_len;
     // Read a new message.
@@ -453,15 +486,14 @@ int gossip_process_receive(gossip_descriptor_t *self) {
 }
 
 int gossip_process_send(gossip_descriptor_t *self) {
+    if (self->state != STATE_JOINING && self->state != STATE_CONNECTED) return -3;
     message_envelope_out_t *head = self->outbound_messages.head;
-    if (head != NULL && self->state == STATE_INITIALIZED) self->state = STATE_JOINING;
-
     int msg_sent = 0;
     while (head != NULL) {
         message_envelope_out_t *current = head;
         head = head->next;
 
-        // Update the sequence number in the buffer to correspond
+        // Update the sequence number in the buffer in order to correspond
         // the sequence number stored in envelope. This approach violates
         // the protocol interface but prevents copying of the whole
         // buffer each time when a single message has multiple recipients.

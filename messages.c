@@ -107,13 +107,43 @@ void message_hello_destroy(const message_hello_t *msg) {
 
 int message_welcome_decode(const uint8_t *buffer, size_t buffer_size, message_welcome_t *result) {
     RETURN_IF_INVALID_PAYLOAD(MESSAGE_WELCOME_TYPE, -1);
-    message_header_decode(buffer, buffer_size, &result->header);
-    return sizeof(message_welcome_t);
+    size_t min_size = sizeof(message_header_t) + sizeof(uint32_t) +
+                      sizeof(cluster_member_t) - sizeof(pt_sockaddr_storage *);
+    if (buffer_size < min_size) return -1;
+
+    int decode_result = message_header_decode(buffer, buffer_size, &result->header);
+
+    const uint8_t *cursor = buffer + decode_result;
+    const uint8_t *buffer_end = buffer + buffer_size;
+
+    result->hello_sequence_num = uint32_decode(cursor);
+    cursor += sizeof(uint32_t);
+
+    result->this_member = (cluster_member_t *) malloc(sizeof(cluster_member_t));
+    decode_result = cluster_member_decode(cursor, buffer_end - cursor, result->this_member);
+    if (decode_result < 0) return decode_result;
+
+    return cursor - buffer;
 }
 
 int message_welcome_encode(const message_welcome_t *msg, uint8_t *buffer, size_t buffer_size) {
-    if (buffer_size < sizeof(message_header_t)) return -1;
-    return message_header_encode(&msg->header, buffer, buffer_size);
+    size_t expected_size = sizeof(message_header_t) + sizeof(uint32_t) + sizeof(cluster_member_t) -
+                           sizeof(pt_sockaddr_storage *) + msg->this_member->address_len;
+    if (buffer_size < expected_size) return -1;
+    int encode_result = message_header_encode(&msg->header, buffer, buffer_size);
+
+    uint8_t *cursor = buffer + encode_result;
+    uint32_encode(msg->hello_sequence_num, cursor);
+    cursor += sizeof(uint32_t);
+
+    const uint8_t *buffer_end = buffer + buffer_size;
+    cursor += cluster_member_encode(msg->this_member, cursor, buffer_end - cursor);
+
+    return cursor - buffer;
+}
+
+void message_welcome_destroy(const message_welcome_t *msg) {
+    free(msg->this_member);
 }
 
 int message_data_decode(const uint8_t *buffer, size_t buffer_size, message_data_t *result) {
