@@ -50,7 +50,9 @@ int vector_clock_init(vector_clock_t *clock) {
     return 0;
 }
 
-static int vector_clock_set_by_id(vector_clock_t *clock, const uint8_t *member_id, uint32_t seq_num) {
+static vector_record_t *vector_clock_set_by_id(vector_clock_t *clock,
+                                               const uint8_t *member_id,
+                                               uint32_t seq_num) {
     int idx = vector_clock_find_by_member_id(clock, member_id);
     if (idx < 0) {
         // insert or override the latest record with the new record.
@@ -60,20 +62,23 @@ static int vector_clock_set_by_id(vector_clock_t *clock, const uint8_t *member_i
 
         if (clock->size < MAX_VECTOR_SIZE) ++clock->size;
         if (++clock->current_idx >= MAX_VECTOR_SIZE) clock->current_idx = 0;
+        return &clock->records[new_idx];
     } else {
         clock->records[idx].sequence_number = seq_num;
+        return &clock->records[idx];
     }
-    return 0;
 }
 
-int vector_clock_increment(vector_clock_t *clock, const cluster_member_t *member) {
+vector_record_t *vector_clock_increment(vector_clock_t *clock, const cluster_member_t *member) {
     vector_record_t *record = vector_clock_find_record(clock, member);
-    if (record == NULL) return -1;
+    if (record == NULL) return NULL;
     ++record->sequence_number;
-    return 0;
+    return record;
 }
 
-int vector_clock_set(vector_clock_t *clock, const cluster_member_t *member, uint32_t seq_num) {
+vector_record_t *vector_clock_set(vector_clock_t *clock,
+                                  const cluster_member_t *member,
+                                  uint32_t seq_num) {
     uint8_t member_id[MEMBER_ID_SIZE];
     vector_clock_create_member_id(member, member_id);
     return vector_clock_set_by_id(clock, member_id, seq_num);

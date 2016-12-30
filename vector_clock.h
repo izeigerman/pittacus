@@ -43,8 +43,8 @@ typedef enum vector_clock_comp_res {
 
 int vector_clock_init(vector_clock_t *clock);
 vector_record_t *vector_clock_find_record(vector_clock_t *clock, const cluster_member_t *member);
-int vector_clock_set(vector_clock_t *clock, const cluster_member_t *member, uint32_t seq_num);
-int vector_clock_increment(vector_clock_t *clock, const cluster_member_t *member);
+vector_record_t *vector_clock_set(vector_clock_t *clock, const cluster_member_t *member, uint32_t seq_num);
+vector_record_t *vector_clock_increment(vector_clock_t *clock, const cluster_member_t *member);
 
 /**
  * Compares 2 vector clocks. If the "merge" parameter is set to true, 2 clocks
