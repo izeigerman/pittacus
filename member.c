@@ -180,19 +180,39 @@ cluster_member_t *cluster_member_map_find_by_uid(cluster_member_map_t *members, 
     return NULL;
 }
 
-cluster_member_t *cluster_member_map_random_member(cluster_member_map_t *members) {
-    if (members->size == 0) return NULL;
-    int idx = (pt_random() % (2 * members->capacity)) - members->capacity;
-    if (idx <= -members->capacity) idx = -(members->capacity - 1);
+size_t cluster_member_map_random_member(cluster_member_map_t *members,
+                                        cluster_member_t **reservoir, size_t reservoir_size) {
+    // Randomly choosing the specified number of elements using the
+    // reservoir sampling algorithm.
+    if (members->size == 0) return 0;
+    size_t actual_reservoir_size = (members->size > reservoir_size) ? reservoir_size : members->size;
 
-    int step = 0;
-    if (idx < 0) step = -1; else step = 1;
-    idx = abs(idx);
+    size_t reservoir_idx = 0;
+    size_t member_idx = 0;
+    size_t members_seen = 0;
 
-    while (members->map[idx] == NULL) {
-        idx += step;
-        if (idx >= members->capacity) idx = 0;
-        else if (idx < 0) idx = members->capacity - 1;
+    // Fill in the reservoir with first map elements.
+    while (reservoir_idx < actual_reservoir_size) {
+        if (members->map[member_idx] != NULL) {
+            ++members_seen;
+            reservoir[reservoir_idx] = members->map[member_idx];
+            ++reservoir_idx;
+        }
+        ++member_idx;
     }
-    return members->map[idx];
+
+    // Randomly replace reservoir's elements with items from the member's map.
+    if (actual_reservoir_size < members->size) {
+        for (; member_idx < members->capacity; ++member_idx) {
+            if (members->map[member_idx] != NULL) {
+                ++members_seen;
+                uint32_t random_idx = pt_random() % (members_seen + 1);
+                if (random_idx < actual_reservoir_size) {
+                    reservoir[random_idx] = members->map[member_idx];
+                }
+            }
+        }
+    }
+
+    return actual_reservoir_size;
 }

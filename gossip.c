@@ -163,17 +163,25 @@ static int gossip_enqueue_to_outbound(gossip_descriptor_t *self,
                                       pt_socklen_t recipient_len) {
     const pt_sockaddr_storage *receivers[MESSAGE_RUMOR_FACTOR];
     pt_socklen_t receiver_lengths[MESSAGE_RUMOR_FACTOR];
-    int receivers_num = MESSAGE_RUMOR_FACTOR;
+    int receivers_num = 0;
     if (recipient != NULL && recipient_len != 0) {
         receivers_num = 1;
         receivers[0] = recipient;
         receiver_lengths[0] = recipient_len;
     } else {
-        // Choose N random members.
-        // FIXME:
+        // The recipient was not provided. That means we should spread
+        // the given message to random nodes.
+        cluster_member_t *reservoir[MESSAGE_RUMOR_FACTOR];
+        receivers_num = cluster_member_map_random_member(&self->members, reservoir, MESSAGE_RUMOR_FACTOR);
+        for (int i = 0; i < receivers_num; ++i) {
+            receivers[i] = reservoir[i]->address;
+            receiver_lengths[i] = reservoir[i]->address_len;
+        }
     }
 
     for (int i = 0; i < receivers_num; ++i) {
+        // Create a new envelope for each recipient.
+        // Note: all created envelopes share the same buffer.
         uint32_t seq_num = ++self->sequence_num;
         message_envelope_out_t *new_envelope = gossip_envelope_create(seq_num, buffer, buffer_size,
                                                                       receivers[i], receiver_lengths[i]);
