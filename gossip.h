@@ -20,13 +20,14 @@
 #include "member.h"
 
 #define MAX_MESSAGE_SIZE 512
+
 #define MAX_INPUT_MESSAGES 20
 // must be >= MAX_INPUT_MESSAGES
 #define MAX_OUTPUT_MESSAGES 25
+
 #define INPUT_BUFFER_SIZE MAX_INPUT_MESSAGES * MAX_MESSAGE_SIZE
 #define OUTPUT_BUFFER_SIZE MAX_OUTPUT_MESSAGES * MAX_MESSAGE_SIZE
 
-typedef struct member_map member_list_t;
 typedef struct message_queue message_queue_t;
 
 typedef enum member_state {
@@ -37,6 +38,8 @@ typedef enum member_state {
     STATE_DISCONNECTED
 } member_state_t;
 
+typedef void (*data_receiver_t)(void *context, const uint8_t *buffer, size_t buffer_size);
+
 typedef struct gossip_descriptor {
     pt_socket_fd socket;
 
@@ -45,17 +48,20 @@ typedef struct gossip_descriptor {
     uint8_t output_buffer[OUTPUT_BUFFER_SIZE];
     size_t output_buffer_offset;
 
+    message_queue_t *outbound_messages;
+    message_queue_t *inbound_messages;
+
     uint32_t sequence_num;
+    uint32_t clock_counter;
 
     member_state_t state;
     cluster_member_t self_address;
-
     cluster_member_map_t members;
-    message_queue_t *outbound_messages;
-    message_queue_t *inbound_messages;
+
+    data_receiver_t data_receiver;
+    void *data_receiver_context;
 } gossip_descriptor_t;
 
-int gossip_handle_buffer(gossip_descriptor_t *self, const uint8_t *buffer, size_t buffer_size);
 int gossip_recv_message(gossip_descriptor_t *self);
 
 #endif //PITTACUS_GOSSIP_H
