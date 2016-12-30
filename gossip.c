@@ -59,8 +59,19 @@ static message_envelope_out_t *gossip_envelope_create(
     return envelope;
 }
 
-static void gossipe_envelope_destroy(message_envelope_out_t *envelope) {
+static void gossip_envelope_destroy(message_envelope_out_t *envelope) {
     free(envelope);
+}
+
+static void gossip_envelope_clear(message_queue_t *queue) {
+    message_envelope_out_t *head = queue->head;
+    while (head != NULL) {
+        message_envelope_out_t *current = head;
+        head = head->next;
+        gossip_envelope_destroy(current);
+    }
+    queue->head = NULL;
+    queue->tail = NULL;
 }
 
 static int gossip_envelope_enqueue(message_queue_t *queue, message_envelope_out_t *envelope) {
@@ -89,7 +100,7 @@ static int gossip_envelope_remove(message_queue_t *queue, message_envelope_out_t
     } else {
         queue->head = next;
     }
-    gossipe_envelope_destroy(envelope);
+    gossip_envelope_destroy(envelope);
     return 0;
 }
 
@@ -141,6 +152,7 @@ static uint32_t gossip_update_output_buffer_offset(gossip_descriptor_t *self) {
     if (self->outbound_messages.head != NULL) {
         offset = gossip_find_available_output_buffer(self) - self->output_buffer;
     }
+    self->output_buffer_offset = offset;
     return offset;
 }
 
@@ -334,7 +346,7 @@ static int gossip_handle_data(gossip_descriptor_t *self, const message_envelope_
     message_data_t msg;
     if (message_data_decode(envelope_in->buffer, envelope_in->buffer_size, &msg) < 0) return -1;
 
-    // Send ACK message back to sender.
+    // Send ACK message back to qsender.
     gossip_enqueue_ack(self, msg.header.sequence_num, envelope_in->sender, envelope_in->sender_len);
 
     // Verify whether we saw the arrived message before.
@@ -386,6 +398,42 @@ static int gossip_handle_new_message(gossip_descriptor_t *self, const message_en
             return -1;
     }
     return result;
+}
+
+int gossip_init(gossip_descriptor_t *self,
+                const pt_sockaddr *self_addr, socklen_t self_addr_len,
+                data_receiver_t data_receiver, void *data_receiver_context) {
+    self->socket = pt_socket_datagram((const pt_sockaddr_storage *) self_addr, self_addr_len);
+    if (self->socket < 0) {
+        return -1;
+    }
+
+    self->output_buffer_offset = 0;
+
+    self->outbound_messages = (message_queue_t ) { .head = NULL, .tail = NULL };
+
+    self->sequence_num = 0;
+    self->data_counter = 0;
+    vector_clock_init(&self->data_version);
+
+    self->state = STATE_INITIALIZED;
+    cluster_member_init(&self->self_address, (const pt_sockaddr_storage *) self_addr, self_addr_len);
+    cluster_member_map_init(&self->members);
+
+    self->data_receiver = data_receiver;
+    self->data_receiver_context = data_receiver_context;
+    return 0;
+}
+
+int gossip_destroy(gossip_descriptor_t *self) {
+    pt_close(self->socket);
+
+    gossip_envelope_clear(&self->outbound_messages);
+
+    self->state = STATE_DESTROYED;
+    cluster_member_destroy(&self->self_address);
+    cluster_member_map_destroy(&self->members);
+    return 0;
 }
 
 int gossip_process_receive(gossip_descriptor_t *self) {
@@ -441,5 +489,6 @@ int gossip_process_send(gossip_descriptor_t *self) {
 }
 
 int gossip_send_data(gossip_descriptor_t *self, const uint8_t *data, uint32_t data_size) {
+    RETURN_IF_NOT_CONNECTED(self->state);
     return gossip_enqueue_data(self, data, data_size, NULL, 0);
 }

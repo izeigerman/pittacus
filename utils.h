@@ -18,6 +18,7 @@
 
 #include <stdint.h>
 
+uint32_t pt_time();
 uint32_t pt_random();
 
 uint16_t uint16_decode(const uint8_t *buffer);

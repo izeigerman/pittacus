@@ -17,6 +17,11 @@
 #include "network.h"
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+
+uint32_t pt_time() {
+    return time(NULL);
+}
 
 uint32_t pt_random() {
     return random();

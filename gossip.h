@@ -36,7 +36,8 @@ typedef enum member_state {
     STATE_JOINING,
     STATE_CONNECTED,
     STATE_LEAVING,
-    STATE_DISCONNECTED
+    STATE_DISCONNECTED,
+    STATE_DESTROYED
 } member_state_t;
 
 typedef void (*data_receiver_t)(void *context, const uint8_t *buffer, size_t buffer_size);
@@ -62,7 +63,18 @@ typedef struct gossip_descriptor {
     void *data_receiver_context;
 } gossip_descriptor_t;
 
+int gossip_init(gossip_descriptor_t *self,
+                const pt_sockaddr *self_addr, socklen_t self_addr_len,
+                data_receiver_t data_receiver, void *data_receiver_context);
+
+int gossip_destroy(gossip_descriptor_t *self);
+
+
+
 int gossip_process_receive(gossip_descriptor_t *self);
+
+int gossip_process_send(gossip_descriptor_t *self);
+
 int gossip_send_data(gossip_descriptor_t *self, const uint8_t *data, uint32_t data_size);
 
 #endif //PITTACUS_GOSSIP_H

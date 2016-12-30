@@ -16,29 +16,25 @@
 #include "network.h"
 #include <unistd.h>
 
-static pt_socket_fd pt_socket(int ipv6, int type) {
-    int domain = ipv6 ? AF_INET6 : AF_INET;
+pt_socket_fd pt_socket(int domain, int type) {
     return socket(domain, type, 0);
 }
 
-pt_socket_fd pt_socket_datagram(int ipv6) {
-    return pt_socket(ipv6, SOCK_DGRAM);
-}
+pt_socket_fd pt_socket_datagram(const pt_sockaddr_storage *addr, socklen_t addr_len) {
+    int domain = addr->ss_family;
+    pt_socket_fd fd = pt_socket(domain, SOCK_DGRAM);
+    if (fd < 0) return fd;
 
-pt_socket_fd pt_socket_stream(int ipv6) {
-    return pt_socket(ipv6, SOCK_STREAM);
+    int bind_result = pt_bind(fd, addr, addr_len);
+    if (bind_result < 0) {
+        pt_close(fd);
+        return bind_result;
+    }
+    return fd;
 }
 
 int pt_bind(pt_socket_fd fd, const pt_sockaddr_storage *addr, pt_socklen_t addr_len) {
     return bind(fd, (const struct sockaddr *) addr, addr_len);
-}
-
-int pt_listen(pt_socket_fd fd, int backlog) {
-    return listen(fd, backlog);
-}
-
-pt_socket_fd pt_accept(pt_socket_fd fd, pt_sockaddr_storage *addr, pt_socklen_t *addr_len) {
-    return accept(fd, (struct sockaddr *) addr, addr_len);
 }
 
 ssize_t pt_recv_from(pt_socket_fd fd, uint8_t *buffer, size_t buffer_size, pt_sockaddr_storage *addr, pt_socklen_t *addr_len) {

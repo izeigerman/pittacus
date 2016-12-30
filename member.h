@@ -26,7 +26,7 @@ typedef struct cluster_member {
     pt_sockaddr_storage *address;
 } cluster_member_t;
 
-int cluster_member_init(cluster_member_t *result, uint32_t uid, pt_sockaddr_storage *address, pt_socklen_t address_len);
+int cluster_member_init(cluster_member_t *result, const pt_sockaddr_storage *address, pt_socklen_t address_len);
 int cluster_member_copy(cluster_member_t *dst, cluster_member_t *src);
 int cluster_member_equals(cluster_member_t *first, cluster_member_t *second);
 void cluster_member_destroy(cluster_member_t *result);

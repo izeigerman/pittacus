@@ -34,13 +34,14 @@ typedef struct sockaddr_storage pt_sockaddr_storage;
 
 typedef int pt_socket_fd;
 
-pt_socket_fd pt_socket_datagram(int ipv6);
-pt_socket_fd pt_socket_stream(int ipv6);
+pt_socket_fd pt_socket_datagram(const pt_sockaddr_storage *addr, socklen_t addr_len);
+
+pt_socket_fd pt_socket(int domain, int type);
 int pt_bind(pt_socket_fd fd, const pt_sockaddr_storage *addr, pt_socklen_t addr_len);
-int pt_listen(pt_socket_fd fd, int backlog);
-pt_socket_fd pt_accept(pt_socket_fd fd, pt_sockaddr_storage *addr, pt_socklen_t *addr_len);
+
 ssize_t pt_recv_from(pt_socket_fd fd, uint8_t *buffer, size_t buffer_size, pt_sockaddr_storage *addr, pt_socklen_t *addr_len);
 ssize_t pt_send_to(pt_socket_fd fd, const uint8_t *buffer, size_t buffer_size, const pt_sockaddr_storage *addr, pt_socklen_t addr_len);
+
 void pt_close(pt_socket_fd fd);
 
 #endif //PITTACUS_NETWORK_UTILS_H
