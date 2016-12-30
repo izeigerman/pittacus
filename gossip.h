@@ -18,17 +18,18 @@
 
 #include "network.h"
 #include "member.h"
+#include "vector_clock.h"
+#include "config.h"
 
-#define MAX_MESSAGE_SIZE 512
+#define INPUT_BUFFER_SIZE MESSAGE_MAX_SIZE
+#define OUTPUT_BUFFER_SIZE MAX_OUTPUT_MESSAGES * MESSAGE_MAX_SIZE
 
-#define MAX_INPUT_MESSAGES 20
-// must be >= MAX_INPUT_MESSAGES
-#define MAX_OUTPUT_MESSAGES 25
+typedef struct message_envelope_out message_envelope_out_t;
 
-#define INPUT_BUFFER_SIZE MAX_INPUT_MESSAGES * MAX_MESSAGE_SIZE
-#define OUTPUT_BUFFER_SIZE MAX_OUTPUT_MESSAGES * MAX_MESSAGE_SIZE
-
-typedef struct message_queue message_queue_t;
+typedef struct message_queue {
+    message_envelope_out_t *head;
+    message_envelope_out_t *tail;
+} message_queue_t;
 
 typedef enum member_state {
     STATE_INITIALIZED,
@@ -44,15 +45,14 @@ typedef struct gossip_descriptor {
     pt_socket_fd socket;
 
     uint8_t input_buffer[INPUT_BUFFER_SIZE];
-    size_t input_buffer_offset;
     uint8_t output_buffer[OUTPUT_BUFFER_SIZE];
     size_t output_buffer_offset;
 
-    message_queue_t *outbound_messages;
-    message_queue_t *inbound_messages;
+    message_queue_t outbound_messages;
 
     uint32_t sequence_num;
-    uint32_t clock_counter;
+    uint32_t data_counter;
+    vector_clock_t data_version;
 
     member_state_t state;
     cluster_member_t self_address;
@@ -62,6 +62,7 @@ typedef struct gossip_descriptor {
     void *data_receiver_context;
 } gossip_descriptor_t;
 
-int gossip_recv_message(gossip_descriptor_t *self);
+int gossip_process_receive(gossip_descriptor_t *self);
+int gossip_send_data(gossip_descriptor_t *self, const uint8_t *data, uint32_t data_size);
 
 #endif //PITTACUS_GOSSIP_H

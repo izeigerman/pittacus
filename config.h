@@ -16,8 +16,20 @@
 #ifndef PITTACUS_CONFIG_H
 #define PITTACUS_CONFIG_H
 
-#define PITTACUS_VERSION 0x01
+#define PROTOCOL_VERSION 0x01
 #define PROTOCOL_ID_LENGTH 8
 extern const char PROTOCOL_ID[PROTOCOL_ID_LENGTH];
+
+/** The maximum number of attempts to deliver a message. */
+#define MESSAGE_SEND_ATTEMPTS 3
+/** The maximum size of the member list that is shared with a newcomer node. */
+#define MEMBER_LIST_SYNC_SIZE 10
+/** The number of members that are used for further gossip propagation. */
+#define MESSAGE_RUMOR_FACTOR 3
+/** The maximum supported size of the message including a protocol overhead. */
+#define MESSAGE_MAX_SIZE 512
+/** The maximum number of unique messages that can be stored in the outbound message queue. */
+#define MAX_OUTPUT_MESSAGES 25
+
 
 #endif //PITTACUS_CONFIG_H

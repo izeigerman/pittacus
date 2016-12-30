@@ -25,7 +25,7 @@ static const double MEMBERS_LOAD_FACTOR = 0.75;
 
 int cluster_member_init(cluster_member_t *result, uint32_t uid, pt_sockaddr_storage *address, pt_socklen_t address_len) {
     result->uid = uid;
-    result->version = PITTACUS_VERSION;
+    result->version = PROTOCOL_VERSION;
     result->address_len = address_len;
     result->address = (pt_sockaddr_storage *) malloc(address_len);
     memcpy(result->address, address, address_len);
