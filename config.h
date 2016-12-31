@@ -20,10 +20,10 @@
 #define PROTOCOL_ID_LENGTH 5
 extern const char PROTOCOL_ID[PROTOCOL_ID_LENGTH];
 
-/** The interval in seconds between retry attempts. */
-#define MESSAGE_ATTEMPT_INTERVAL 5
+/** The interval in milliseconds between retry attempts. */
+#define MESSAGE_RETRY_INTERVAL 5000
 /** The maximum number of attempts to deliver a message. */
-#define MESSAGE_SEND_ATTEMPTS 3
+#define MESSAGE_RETRY_ATTEMPTS 3
 /** The maximum size of the member list that is shared with a newcomer node. */
 #define MEMBER_LIST_SYNC_SIZE 10
 /** The number of members that are used for further gossip propagation. */

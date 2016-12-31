@@ -38,8 +38,7 @@ typedef struct message_envelope_out {
     uint32_t sequence_num;
     uint64_t attempt_ts;
     uint16_t attempt_num;
-
-    uint8_t msg_type;
+    uint16_t max_attempts;
 
     struct message_envelope_out *prev;
     struct message_envelope_out *next;
@@ -49,6 +48,7 @@ typedef struct message_envelope_out {
 static message_envelope_out_t *gossip_envelope_create(
         uint32_t sequence_number,
         const uint8_t *buffer, size_t buffer_size,
+        uint16_t max_attempts,
         const pt_sockaddr_storage *recipient, pt_socklen_t recipient_len) {
     message_envelope_out_t *envelope = (message_envelope_out_t *) malloc(sizeof(message_envelope_out_t));
     envelope->sequence_num = sequence_number;
@@ -60,7 +60,7 @@ static message_envelope_out_t *gossip_envelope_create(
     envelope->buffer_size = buffer_size;
     memcpy(&envelope->recipient, recipient, recipient_len);
     envelope->recipient_len = recipient_len;
-    envelope->msg_type = 0;
+    envelope->max_attempts = max_attempts;
     return envelope;
 }
 
@@ -164,7 +164,7 @@ static uint32_t gossip_update_output_buffer_offset(gossip_descriptor_t *self) {
 static int gossip_enqueue_to_outbound(gossip_descriptor_t *self,
                                       const uint8_t *buffer,
                                       size_t buffer_size,
-                                      uint8_t msg_type,
+                                      uint16_t max_attempts,
                                       const pt_sockaddr_storage *recipient,
                                       pt_socklen_t recipient_len) {
     const pt_sockaddr_storage *receivers[MESSAGE_RUMOR_FACTOR];
@@ -189,11 +189,11 @@ static int gossip_enqueue_to_outbound(gossip_descriptor_t *self,
         // Create a new envelope for each recipient.
         // Note: all created envelopes share the same buffer.
         uint32_t seq_num = ++self->sequence_num;
-        message_envelope_out_t *new_envelope = gossip_envelope_create(seq_num, buffer, buffer_size,
+        message_envelope_out_t *new_envelope = gossip_envelope_create(seq_num,
+                                                                      buffer, buffer_size,
+                                                                      max_attempts,
                                                                       receivers[i], receiver_lengths[i]);
         if (new_envelope == NULL) return -1;
-        // FIXME: probably move this to gossip_envelope_create.
-        new_envelope->msg_type = msg_type;
         gossip_envelope_enqueue(&self->outbound_messages, new_envelope);
     }
     return 0;
@@ -207,6 +207,7 @@ static int gossip_enqueue_message(gossip_descriptor_t *self,
     uint32_t offset = gossip_update_output_buffer_offset(self);
     uint8_t *buffer = self->output_buffer + offset;
     int encode_result = 0;
+    uint16_t max_attempts = MESSAGE_RETRY_ATTEMPTS;
 
     switch(msg_type) {
         case MESSAGE_HELLO_TYPE:
@@ -216,6 +217,9 @@ static int gossip_enqueue_message(gossip_descriptor_t *self,
         case MESSAGE_WELCOME_TYPE:
             encode_result = message_welcome_encode((const message_welcome_t *) msg,
                                                    buffer, MESSAGE_MAX_SIZE);
+            // Welcome message can't be acknowledged. It should be removed from the
+            // outbound queue after the first attempt.
+            max_attempts = 1;
             break;
         case MESSAGE_MEMBER_LIST_TYPE:
             encode_result = message_member_list_encode((const message_member_list_t *) msg,
@@ -228,13 +232,16 @@ static int gossip_enqueue_message(gossip_descriptor_t *self,
         case MESSAGE_ACK_TYPE:
             encode_result = message_ack_encode((const message_ack_t *) msg,
                                                buffer, MESSAGE_MAX_SIZE);
+            // ACK message can't be acknowledged. It should be removed from the
+            // outbound queue after the first attempt.
+            max_attempts = 1;
             break;
         default:
             return -1;
     }
 
     if (encode_result < 0) return encode_result;
-    return gossip_enqueue_to_outbound(self, buffer, encode_result, msg_type, recipient, recipient_len);
+    return gossip_enqueue_to_outbound(self, buffer, encode_result, max_attempts, recipient, recipient_len);
 }
 
 static int gossip_enqueue_ack(gossip_descriptor_t *self,
@@ -510,8 +517,9 @@ int gossip_process_send(gossip_descriptor_t *self) {
     while (head != NULL) {
         message_envelope_out_t *current = head;
         head = head->next;
+        uint64_t current_ts = pt_time();
 
-        if (current->attempt_num != 0 && current->attempt_ts + MESSAGE_ATTEMPT_INTERVAL > pt_time()) {
+        if (current->attempt_num != 0 && current->attempt_ts + MESSAGE_RETRY_INTERVAL > current_ts) {
             // It's not yet time to retry this message.
             continue;
         }
@@ -533,13 +541,10 @@ int gossip_process_send(gossip_descriptor_t *self) {
             return write_result;
         }
 
-        current->attempt_ts = pt_time();
-        if (++current->attempt_num >= MESSAGE_SEND_ATTEMPTS ||
-                current->msg_type == MESSAGE_ACK_TYPE ||
-                current->msg_type == MESSAGE_WELCOME_TYPE) {
-            // Either the message exceeded the maximum number of attempts or this is
-            // an ACK/Welcome message (can't be acknowledged). Immediately remove this message
-            // from the queue.
+        current->attempt_ts = current_ts;
+        if (++current->attempt_num >= current->max_attempts) {
+            // The message exceeded the maximum number of attempts.
+            // Remove this message from the queue.
             gossip_envelope_remove(&self->outbound_messages, current);
         }
         ++msg_sent;

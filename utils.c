@@ -18,9 +18,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <sys/time.h>
 
-uint32_t pt_time() {
-    return time(NULL);
+uint64_t pt_time() {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return tv.tv_sec * 1000LL + tv.tv_usec / 1000;
 }
 
 uint32_t pt_random() {

@@ -24,7 +24,7 @@ static const uint8_t MEMBERS_EXTENSION_FACTOR = 2;
 static const double MEMBERS_LOAD_FACTOR = 0.75;
 
 int cluster_member_init(cluster_member_t *result, const pt_sockaddr_storage *address, pt_socklen_t address_len) {
-    result->uid = pt_time();
+    result->uid = pt_time() / 1000;
     result->version = PROTOCOL_VERSION;
     result->address_len = address_len;
     result->address = (pt_sockaddr_storage *) malloc(address_len);
