@@ -15,6 +15,7 @@
  */
 #include "network.h"
 #include <unistd.h>
+#include <fcntl.h>
 
 pt_socket_fd pt_socket(int domain, int type) {
     return socket(domain, type, 0);
@@ -24,6 +25,12 @@ pt_socket_fd pt_socket_datagram(const pt_sockaddr_storage *addr, socklen_t addr_
     int domain = addr->ss_family;
     pt_socket_fd fd = pt_socket(domain, SOCK_DGRAM);
     if (fd < 0) return fd;
+
+    int fcntl_result = fcntl(fd, F_SETFL, O_NONBLOCK);
+    if (fcntl_result < 0) {
+        pt_close(fd);
+        return fcntl_result;
+    }
 
     int bind_result = pt_bind(fd, addr, addr_len);
     if (bind_result < 0) {

@@ -17,9 +17,11 @@
 #define PITTACUS_CONFIG_H
 
 #define PROTOCOL_VERSION 0x01
-#define PROTOCOL_ID_LENGTH 8
+#define PROTOCOL_ID_LENGTH 5
 extern const char PROTOCOL_ID[PROTOCOL_ID_LENGTH];
 
+/** The interval in seconds between retry attempts. */
+#define MESSAGE_ATTEMPT_INTERVAL 5
 /** The maximum number of attempts to deliver a message. */
 #define MESSAGE_SEND_ATTEMPTS 3
 /** The maximum size of the member list that is shared with a newcomer node. */

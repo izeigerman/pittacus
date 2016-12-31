@@ -15,4 +15,4 @@
  */
 #include "config.h"
 
-const char PROTOCOL_ID[PROTOCOL_ID_LENGTH] = { 'p', 'i', 't', 't', 'a', 'c', 'u', 's' };
+const char PROTOCOL_ID[PROTOCOL_ID_LENGTH] = { 'p', 't', 'c', 's', '\0' };
