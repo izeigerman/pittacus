@@ -441,9 +441,9 @@ static int gossip_handle_new_message(gossip_descriptor_t *self, const message_en
 }
 
 int gossip_init(gossip_descriptor_t *self,
-                const pt_sockaddr *self_addr, socklen_t self_addr_len,
+                const cluster_node_addr_t *self_addr,
                 data_receiver_t data_receiver, void *data_receiver_context) {
-    self->socket = pt_socket_datagram((const pt_sockaddr_storage *) self_addr, self_addr_len);
+    self->socket = pt_socket_datagram((const pt_sockaddr_storage *) self_addr->addr, self_addr->addr_len);
     if (self->socket < 0) {
         return -1;
     }
@@ -457,7 +457,7 @@ int gossip_init(gossip_descriptor_t *self,
     vector_clock_init(&self->data_version);
 
     self->state = STATE_INITIALIZED;
-    cluster_member_init(&self->self_address, (const pt_sockaddr_storage *) self_addr, self_addr_len);
+    cluster_member_init(&self->self_address, (const pt_sockaddr_storage *) self_addr->addr, self_addr->addr_len);
     cluster_member_map_init(&self->members);
 
     self->data_receiver = data_receiver;
@@ -476,14 +476,14 @@ int gossip_destroy(gossip_descriptor_t *self) {
     return 0;
 }
 
-int gossip_join(gossip_descriptor_t *self, const seed_node_t *seed_nodes, uint16_t seed_nodes_len) {
+int gossip_join(gossip_descriptor_t *self, const cluster_node_addr_t *seed_nodes, uint16_t seed_nodes_len) {
     if (self->state != STATE_INITIALIZED) return -1;
     if (seed_nodes == NULL || seed_nodes_len == 0) {
         // No seed nodes were provided.
         self->state = STATE_CONNECTED;
     } else {
         for (int i = 0; i < seed_nodes_len; ++i) {
-            seed_node_t node = seed_nodes[i];
+            cluster_node_addr_t node = seed_nodes[i];
             int res = gossip_enqueue_hello(self, (const pt_sockaddr_storage *) node.addr, node.addr_len);
             if (res < 0) return res;
         }
@@ -496,7 +496,7 @@ int gossip_process_receive(gossip_descriptor_t *self) {
     if (self->state != STATE_JOINING && self->state != STATE_CONNECTED) return -3;
 
     pt_sockaddr_storage addr;
-    pt_socklen_t addr_len;
+    pt_socklen_t addr_len = sizeof(pt_sockaddr_storage);
     // Read a new message.
     int read_result = pt_recv_from(self->socket, self->input_buffer, INPUT_BUFFER_SIZE, &addr, &addr_len);
     if (read_result <= 0) return read_result;
