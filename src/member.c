@@ -18,6 +18,7 @@
 #include "member.h"
 #include "config.h"
 #include "utils.h"
+#include "errors.h"
 
 static const uint32_t MEMBERS_INITIAL_CAPACITY = 32;
 static const uint8_t MEMBERS_EXTENSION_FACTOR = 2;
@@ -28,8 +29,9 @@ int cluster_member_init(cluster_member_t *result, const pt_sockaddr_storage *add
     result->version = PROTOCOL_VERSION;
     result->address_len = address_len;
     result->address = (pt_sockaddr_storage *) malloc(address_len);
+    if (result->address == NULL) return PITTACUS_ERR_ALLOCATION_FAILED;
     memcpy(result->address, address, address_len);
-    return 0;
+    return PITTACUS_ERR_NONE;
 }
 
 int cluster_member_copy(cluster_member_t *dst, cluster_member_t *src) {
@@ -37,8 +39,9 @@ int cluster_member_copy(cluster_member_t *dst, cluster_member_t *src) {
     dst->version = src->version;
     dst->address_len = src->address_len;
     dst->address = (pt_sockaddr_storage *) malloc(src->address_len);
+    if (dst->address == NULL) return PITTACUS_ERR_ALLOCATION_FAILED;
     memcpy(dst->address, src->address, src->address_len);
-    return 0;
+    return PITTACUS_ERR_NONE;
 }
 
 int cluster_member_equals(cluster_member_t *first, cluster_member_t *second) {
@@ -53,7 +56,7 @@ void cluster_member_destroy(cluster_member_t *result) {
 }
 
 int cluster_member_decode(const uint8_t *buffer, size_t buffer_size, cluster_member_t *member) {
-    if (buffer_size < 2 * sizeof(uint32_t) + sizeof(uint16_t)) return -1;
+    if (buffer_size < 2 * sizeof(uint32_t) + sizeof(uint16_t)) return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
     const uint8_t *cursor = buffer;
     member->version = uint16_decode(cursor);
     cursor += sizeof(uint16_t);
@@ -67,7 +70,9 @@ int cluster_member_decode(const uint8_t *buffer, size_t buffer_size, cluster_mem
 }
 
 int cluster_member_encode(const cluster_member_t *member, uint8_t *buffer, size_t buffer_size) {
-    if (buffer_size < 2 * sizeof(uint32_t) + sizeof(uint16_t) + member->address_len) return -1;
+    if (buffer_size < 2 * sizeof(uint32_t) + sizeof(uint16_t) + member->address_len) {
+        return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
+    }
     uint8_t *cursor = buffer;
     uint16_encode(member->version, cursor);
     cursor += sizeof(uint16_t);
@@ -89,7 +94,10 @@ static uint32_t cluster_member_map_idx(uint32_t capacity, uint32_t uid) {
 static cluster_member_map_t *cluster_member_map_extend(cluster_member_map_t *members, uint32_t required_size) {
     uint32_t new_capacity = members->capacity;
     while (required_size >= new_capacity * MEMBERS_LOAD_FACTOR) new_capacity *= MEMBERS_EXTENSION_FACTOR;
+
     cluster_member_t **new_member_map = (cluster_member_t **) calloc(new_capacity, sizeof(cluster_member_t *));
+    if (new_member_map == NULL) return NULL;
+
     for (int i = 0; i < members->capacity; ++i) {
         if (members->map[i] != NULL) {
             uint32_t new_idx = cluster_member_map_idx(new_capacity, members->map[i]->uid);
@@ -104,20 +112,27 @@ static cluster_member_map_t *cluster_member_map_extend(cluster_member_map_t *mem
 
 int cluster_member_map_init(cluster_member_map_t *members) {
     uint32_t capacity = MEMBERS_INITIAL_CAPACITY;
+
     cluster_member_t **member_map = (cluster_member_t **) calloc(capacity, sizeof(cluster_member_t *));
+    if (member_map == NULL) return PITTACUS_ERR_ALLOCATION_FAILED;
+
     members->size = 0;
     members->capacity = capacity;
     members->map = member_map;
-    return 0;
+    return PITTACUS_ERR_NONE;
 }
 
 int cluster_member_map_put(cluster_member_map_t *members, cluster_member_t *new_members, size_t new_members_size) {
     uint32_t new_size = members->size + new_members_size;
     // increase the capacity of the map if the new size is >= 0.75 of the current capacity.
-    if (new_size >= members->capacity * MEMBERS_LOAD_FACTOR) cluster_member_map_extend(members, new_size);
+    if (new_size >= members->capacity * MEMBERS_LOAD_FACTOR) {
+        if (cluster_member_map_extend(members, new_size) == NULL) return PITTACUS_ERR_ALLOCATION_FAILED;
+    }
 
     for (cluster_member_t *current = new_members; current < new_members + new_members_size; ++current) {
         cluster_member_t *new_member = (cluster_member_t *) malloc(sizeof(cluster_member_t));
+        if (new_member == NULL) return PITTACUS_ERR_ALLOCATION_FAILED;
+
         cluster_member_copy(new_member, current);
         uint32_t idx = cluster_member_map_idx(members->capacity, new_member->uid);
         while (members->map[idx] != NULL && !cluster_member_equals(members->map[idx], new_member)) {
@@ -132,7 +147,7 @@ int cluster_member_map_put(cluster_member_map_t *members, cluster_member_t *new_
         }
         members->map[idx] = new_member;
     }
-    return 0;
+    return PITTACUS_ERR_NONE;
 }
 
 void cluster_member_map_item_destroy(cluster_member_t *member) {
@@ -152,7 +167,7 @@ void cluster_member_map_destroy(cluster_member_map_t *members) {
 }
 
 int cluster_member_map_remove(cluster_member_map_t *members, cluster_member_t *member) {
-    if (members->size == 0) return -1;
+    if (members->size == 0) return 0;
     uint32_t seen = 0;
     uint32_t idx = cluster_member_map_idx(members->capacity, member->uid);
     while (seen < members->capacity && members->map[idx] != NULL) {

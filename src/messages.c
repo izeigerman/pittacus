@@ -19,6 +19,7 @@
 #include "messages.h"
 #include "network.h"
 #include "utils.h"
+#include "errors.h"
 
 
 #define RETURN_IF_INVALID_PAYLOAD(t, r) if (!message_is_payload_valid(buffer, buffer_size, (t))) return r;
@@ -26,7 +27,9 @@
 const char PROTOCOL_ID[PROTOCOL_ID_LENGTH] = { 'p', 't', 'c', 's', '\0' };
 
 int message_type_decode(const uint8_t *buffer, size_t buffer_size) {
-    if (buffer_size < sizeof(message_header_t)) return -1;
+    if (buffer_size < sizeof(message_header_t)) {
+        return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
+    }
     return *(buffer + PROTOCOL_ID_LENGTH);
 }
 
@@ -43,7 +46,7 @@ void message_header_init(message_header_t *header, uint8_t message_type, uint32_
 }
 
 static int message_header_encode(const message_header_t *msg, uint8_t *buffer, size_t buffer_size) {
-    if (buffer_size < sizeof(struct message_header)) return -1;
+    if (buffer_size < sizeof(struct message_header)) return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
     memcpy(buffer, msg->protocol_id, PROTOCOL_ID_LENGTH);
 
     uint8_t *cursor = buffer + PROTOCOL_ID_LENGTH;
@@ -58,7 +61,9 @@ static int message_header_encode(const message_header_t *msg, uint8_t *buffer, s
 }
 
 static int message_header_decode(const uint8_t *buffer, size_t buffer_size, message_header_t *result) {
-    if (buffer_size < sizeof(struct message_header)) return -1;
+    if (buffer_size < sizeof(struct message_header)) {
+        return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
+    }
     memcpy(result->protocol_id, buffer, PROTOCOL_ID_LENGTH);
 
     const uint8_t *cursor = buffer + PROTOCOL_ID_LENGTH;
@@ -74,12 +79,13 @@ static int message_header_decode(const uint8_t *buffer, size_t buffer_size, mess
 }
 
 int message_hello_decode(const uint8_t *buffer, size_t buffer_size, message_hello_t *result) {
-    RETURN_IF_INVALID_PAYLOAD(MESSAGE_HELLO_TYPE, -1);
+    RETURN_IF_INVALID_PAYLOAD(MESSAGE_HELLO_TYPE, PITTACUS_ERR_INVALID_MESSAGE);
     size_t min_size = sizeof(message_header_t) + sizeof(cluster_member_t) - sizeof(pt_sockaddr_storage *);
-    if (buffer_size < min_size) return -1;
+    if (buffer_size < min_size) return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
 
     message_header_decode(buffer, buffer_size, &result->header);
     result->this_member = (cluster_member_t *) malloc(sizeof(cluster_member_t));
+    if (result->this_member == NULL) return PITTACUS_ERR_ALLOCATION_FAILED;
 
     int member_bytes = cluster_member_decode(buffer + sizeof(message_header_t),
                                              buffer_size - sizeof(message_header_t),
@@ -91,10 +97,10 @@ int message_hello_decode(const uint8_t *buffer, size_t buffer_size, message_hell
 int message_hello_encode(const message_hello_t *msg, uint8_t *buffer, size_t buffer_size) {
     size_t expected_size = sizeof(message_header_t) + sizeof(cluster_member_t) -
             sizeof(pt_sockaddr_storage *) + msg->this_member->address_len;
-    if (buffer_size < expected_size) return -1;
+    if (buffer_size < expected_size) return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
 
     int encode_result = message_header_encode(&msg->header, buffer, buffer_size);
-    if (encode_result < 0) return -1;
+    if (encode_result < 0) return encode_result;
 
     uint8_t *cursor = buffer + encode_result;
     const uint8_t *buffer_end = buffer + buffer_size;
@@ -108,10 +114,10 @@ void message_hello_destroy(const message_hello_t *msg) {
 }
 
 int message_welcome_decode(const uint8_t *buffer, size_t buffer_size, message_welcome_t *result) {
-    RETURN_IF_INVALID_PAYLOAD(MESSAGE_WELCOME_TYPE, -1);
+    RETURN_IF_INVALID_PAYLOAD(MESSAGE_WELCOME_TYPE, PITTACUS_ERR_INVALID_MESSAGE);
     size_t min_size = sizeof(message_header_t) + sizeof(uint32_t) +
                       sizeof(cluster_member_t) - sizeof(pt_sockaddr_storage *);
-    if (buffer_size < min_size) return -1;
+    if (buffer_size < min_size) return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
 
     int decode_result = message_header_decode(buffer, buffer_size, &result->header);
 
@@ -122,6 +128,8 @@ int message_welcome_decode(const uint8_t *buffer, size_t buffer_size, message_we
     cursor += sizeof(uint32_t);
 
     result->this_member = (cluster_member_t *) malloc(sizeof(cluster_member_t));
+    if (result->this_member == NULL) return PITTACUS_ERR_ALLOCATION_FAILED;
+
     decode_result = cluster_member_decode(cursor, buffer_end - cursor, result->this_member);
     if (decode_result < 0) return decode_result;
 
@@ -131,7 +139,7 @@ int message_welcome_decode(const uint8_t *buffer, size_t buffer_size, message_we
 int message_welcome_encode(const message_welcome_t *msg, uint8_t *buffer, size_t buffer_size) {
     size_t expected_size = sizeof(message_header_t) + sizeof(uint32_t) + sizeof(cluster_member_t) -
                            sizeof(pt_sockaddr_storage *) + msg->this_member->address_len;
-    if (buffer_size < expected_size) return -1;
+    if (buffer_size < expected_size) return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
     int encode_result = message_header_encode(&msg->header, buffer, buffer_size);
 
     uint8_t *cursor = buffer + encode_result;
@@ -149,7 +157,7 @@ void message_welcome_destroy(const message_welcome_t *msg) {
 }
 
 int message_data_decode(const uint8_t *buffer, size_t buffer_size, message_data_t *result) {
-    RETURN_IF_INVALID_PAYLOAD(MESSAGE_DATA_TYPE, -1);
+    RETURN_IF_INVALID_PAYLOAD(MESSAGE_DATA_TYPE, PITTACUS_ERR_INVALID_MESSAGE);
 
     const uint8_t *cursor = buffer;
     const uint8_t *buffer_end = buffer + buffer_size;
@@ -167,7 +175,7 @@ int message_data_decode(const uint8_t *buffer, size_t buffer_size, message_data_
 
     size_t base_size = sizeof(message_header_t) + sizeof(vector_record_t) + sizeof(uint32_t);
     size_t expected_size = base_size + result->data_size;
-    if (buffer_size != expected_size) return -1;
+    if (buffer_size != expected_size) return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
 
     uint8_t *data_cursor = result->data_size > 0 ? (uint8_t *) cursor : NULL;
     result->data = data_cursor;
@@ -178,7 +186,7 @@ int message_data_decode(const uint8_t *buffer, size_t buffer_size, message_data_
 
 int message_data_encode(const message_data_t *msg, uint8_t *buffer, size_t buffer_size) {
     size_t min_size = sizeof(message_header_t) + sizeof(vector_record_t) + sizeof(uint32_t) + msg->data_size;
-    if (buffer_size < min_size) return -1;
+    if (buffer_size < min_size) return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
 
     uint8_t *cursor = buffer;
     const uint8_t *buffer_end = buffer + buffer_size;
@@ -201,17 +209,18 @@ int message_data_encode(const message_data_t *msg, uint8_t *buffer, size_t buffe
 }
 
 int message_member_list_decode(const uint8_t *buffer, size_t buffer_size, message_member_list_t *result) {
-    RETURN_IF_INVALID_PAYLOAD(MESSAGE_MEMBER_LIST_TYPE, -1);
+    RETURN_IF_INVALID_PAYLOAD(MESSAGE_MEMBER_LIST_TYPE, PITTACUS_ERR_INVALID_MESSAGE);
 
     const uint8_t *cursor = buffer;
 
-    if (message_header_decode(cursor, buffer_size, &result->header) < 0) return -1;
+    if (message_header_decode(cursor, buffer_size, &result->header) < 0) return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
     cursor += sizeof(message_header_t);
 
     result->members_n = uint16_decode(cursor);
     cursor += sizeof(uint16_t);
 
     result->members = (cluster_member_t *) malloc(result->members_n * sizeof(cluster_member_t));
+    if (result->members == NULL) return PITTACUS_ERR_ALLOCATION_FAILED;
 
     const uint8_t *buffer_end = buffer + buffer_size;
     for (int i = 0; i < result->members_n; ++i) {
@@ -224,10 +233,10 @@ int message_member_list_decode(const uint8_t *buffer, size_t buffer_size, messag
 int message_member_list_encode(const message_member_list_t *msg, uint8_t *buffer, size_t buffer_size) {
     uint32_t expected_size = sizeof(message_header_t) + sizeof(uint16_t);
     expected_size += msg->members_n * (sizeof(uint16_t) + sizeof(uint32_t) + sizeof(pt_sockaddr_storage));
-    if (buffer_size < expected_size) return -1;
+    if (buffer_size < expected_size) return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
 
     int encode_result = message_header_encode(&msg->header, buffer, buffer_size);
-    if (encode_result < 0) return -1;
+    if (encode_result < 0) return encode_result;
 
     uint8_t *cursor = buffer + encode_result;
     uint16_encode(msg->members_n, cursor);
@@ -245,12 +254,12 @@ void message_member_list_destroy(const message_member_list_t *msg) {
 }
 
 int message_ack_decode(const uint8_t *buffer, size_t buffer_size, message_ack_t *result) {
-    RETURN_IF_INVALID_PAYLOAD(MESSAGE_ACK_TYPE, -1);
-    if (buffer_size < sizeof(message_header_t) + sizeof(uint32_t)) return -1;
+    RETURN_IF_INVALID_PAYLOAD(MESSAGE_ACK_TYPE, PITTACUS_ERR_INVALID_MESSAGE);
+    if (buffer_size < sizeof(message_header_t) + sizeof(uint32_t)) return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
 
     const uint8_t *cursor = buffer;
 
-    if (message_header_decode(cursor, buffer_size, &result->header) < 0) return -1;
+    if (message_header_decode(cursor, buffer_size, &result->header) < 0) return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
     cursor += sizeof(message_header_t);
 
     result->ack_sequence_num = uint32_decode(cursor);
@@ -260,10 +269,10 @@ int message_ack_decode(const uint8_t *buffer, size_t buffer_size, message_ack_t 
 }
 
 int message_ack_encode(const message_ack_t *msg, uint8_t *buffer, size_t buffer_size) {
-    if (buffer_size < sizeof(message_header_t) + sizeof(uint32_t)) return -1;
+    if (buffer_size < sizeof(message_header_t) + sizeof(uint32_t)) return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
 
     int encode_result = message_header_encode(&msg->header, buffer, buffer_size);
-    if (encode_result < 0) return -1;
+    if (encode_result < 0) return encode_result;
 
     uint8_t *cursor = buffer + encode_result;
     uint32_encode(msg->ack_sequence_num, cursor);

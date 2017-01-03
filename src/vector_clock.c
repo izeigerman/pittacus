@@ -15,6 +15,7 @@
  */
 #include "vector_clock.h"
 #include "network.h"
+#include "errors.h"
 #include <string.h>
 
 #define MEMBER_ID_ADDR_SIZE MEMBER_ID_SIZE - 4
@@ -33,7 +34,7 @@ static int vector_clock_find_by_member_id(const vector_clock_t *clock, const uin
     for (int i = 0; i < clock->size; ++i) {
         if (memcmp(clock->records[i].member_id, member_id, MEMBER_ID_SIZE) == 0) return i;
     }
-    return -1;
+    return PITTACUS_ERR_NOT_FOUND;
 }
 
 vector_record_t *vector_clock_find_record(vector_clock_t *clock, const cluster_member_t *member) {
@@ -45,9 +46,9 @@ vector_record_t *vector_clock_find_record(vector_clock_t *clock, const cluster_m
 }
 
 int vector_clock_init(vector_clock_t *clock) {
-    if (clock == NULL) return -1;
+    if (clock == NULL) return PITTACUS_ERR_INIT_FAILED;
     memset(clock, 0, sizeof(vector_clock_t));
-    return 0;
+    return PITTACUS_ERR_NONE;
 }
 
 static vector_record_t *vector_clock_set_by_id(vector_clock_t *clock,
@@ -162,7 +163,7 @@ vector_clock_comp_res_t vector_clock_compare(vector_clock_t *first,
 }
 
 int vector_clock_record_decode(const uint8_t *buffer, size_t buffer_size, vector_record_t *result) {
-    if (buffer_size < sizeof(vector_record_t)) return -1;
+    if (buffer_size < sizeof(vector_record_t)) return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
 
     const uint8_t *cursor = buffer;
     result->sequence_number = uint32_decode(cursor);
@@ -175,7 +176,7 @@ int vector_clock_record_decode(const uint8_t *buffer, size_t buffer_size, vector
 }
 
 int vector_clock_record_encode(const vector_record_t *record, uint8_t *buffer, size_t buffer_size) {
-    if (buffer_size < sizeof(vector_record_t)) return -1;
+    if (buffer_size < sizeof(vector_record_t)) return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
 
     uint8_t *cursor = buffer;
     uint32_encode(record->sequence_number, cursor);

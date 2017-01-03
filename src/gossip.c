@@ -18,10 +18,11 @@
 #include "member.h"
 #include "vector_clock.h"
 #include "config.h"
+#include "errors.h"
 #include <stdlib.h>
 #include <string.h>
 
-#define RETURN_IF_NOT_CONNECTED(state) if ((state) != STATE_CONNECTED) return -3;
+#define RETURN_IF_NOT_CONNECTED(state) if ((state) != STATE_CONNECTED) return PITTACUS_ERR_BAD_STATE;
 
 typedef struct message_envelope_in {
     const pt_sockaddr_storage *sender;
@@ -81,6 +82,7 @@ static message_envelope_out_t *gossip_envelope_create(
         uint16_t max_attempts,
         const pt_sockaddr_storage *recipient, pt_socklen_t recipient_len) {
     message_envelope_out_t *envelope = (message_envelope_out_t *) malloc(sizeof(message_envelope_out_t));
+    if (envelope == NULL) return NULL;
     envelope->sequence_num = sequence_number;
     envelope->next = NULL;
     envelope->prev = NULL;
@@ -119,7 +121,7 @@ static int gossip_envelope_enqueue(message_queue_t *queue, message_envelope_out_
         queue->tail->next = envelope;
         queue->tail = envelope;
     }
-    return 0;
+    return PITTACUS_ERR_NONE;
 }
 
 static int gossip_envelope_remove(message_queue_t *queue, message_envelope_out_t *envelope) {
@@ -136,7 +138,7 @@ static int gossip_envelope_remove(message_queue_t *queue, message_envelope_out_t
         queue->head = next;
     }
     gossip_envelope_destroy(envelope);
-    return 0;
+    return PITTACUS_ERR_NONE;
 }
 
 static message_envelope_out_t *gossip_envelope_find_by_sequence_num(message_queue_t *queue, uint32_t sequence_num) {
@@ -223,10 +225,10 @@ static int gossip_enqueue_to_outbound(pittacus_gossip_t *self,
                                                                       buffer, buffer_size,
                                                                       max_attempts,
                                                                       receivers[i], receiver_lengths[i]);
-        if (new_envelope == NULL) return -1;
+        if (new_envelope == NULL) return PITTACUS_ERR_ALLOCATION_FAILED;
         gossip_envelope_enqueue(&self->outbound_messages, new_envelope);
     }
-    return 0;
+    return PITTACUS_ERR_NONE;
 }
 
 static int gossip_enqueue_message(pittacus_gossip_t *self,
@@ -267,7 +269,7 @@ static int gossip_enqueue_message(pittacus_gossip_t *self,
             max_attempts = 1;
             break;
         default:
-            return -1;
+            return PITTACUS_ERR_INVALID_MESSAGE;
     }
 
     if (encode_result < 0) return encode_result;
@@ -337,6 +339,7 @@ static int gossip_enqueue_member_list(pittacus_gossip_t *self,
 
     // TODO: get rid of the redundant copying.
     cluster_member_t *members_to_send = (cluster_member_t *) malloc(members_num * sizeof(cluster_member_t));
+    if (members_to_send == NULL) return PITTACUS_ERR_ALLOCATION_FAILED;
     int to_send_idx = 0;
     int member_idx = 0;
     while (to_send_idx < members_num) {
@@ -358,7 +361,10 @@ static int gossip_enqueue_member_list(pittacus_gossip_t *self,
 static int gossip_handle_hello(pittacus_gossip_t *self, const message_envelope_in_t *envelope_in) {
     RETURN_IF_NOT_CONNECTED(self->state);
     message_hello_t msg;
-    if (message_hello_decode(envelope_in->buffer, envelope_in->buffer_size, &msg) < 0) return -1;
+    int decode_result = message_hello_decode(envelope_in->buffer, envelope_in->buffer_size, &msg);
+    if (decode_result < 0) {
+        return decode_result;
+    }
 
     // Send back a Welcome message.
     gossip_enqueue_welcome(self, msg.header.sequence_num, envelope_in->sender, envelope_in->sender_len);
@@ -374,12 +380,15 @@ static int gossip_handle_hello(pittacus_gossip_t *self, const message_envelope_i
     // FIXME: send the existing data messages
 
     message_hello_destroy(&msg);
-    return 0;
+    return PITTACUS_ERR_NONE;
 }
 
 static int gossip_handle_welcome(pittacus_gossip_t *self, const message_envelope_in_t *envelope_in) {
     message_welcome_t msg;
-    if (message_welcome_decode(envelope_in->buffer, envelope_in->buffer_size, &msg) < 0) return -1;
+    int decode_result = message_welcome_decode(envelope_in->buffer, envelope_in->buffer_size, &msg);
+    if (decode_result < 0) {
+        return decode_result;
+    }
     self->state = STATE_CONNECTED;
 
     // Now when the seed node responded we can
@@ -393,13 +402,16 @@ static int gossip_handle_welcome(pittacus_gossip_t *self, const message_envelope
     if (hello_envelope != NULL) gossip_envelope_remove(&self->outbound_messages, hello_envelope);
 
     message_welcome_destroy(&msg);
-    return 0;
+    return PITTACUS_ERR_NONE;
 }
 
 static int gossip_handle_member_list(pittacus_gossip_t *self, const message_envelope_in_t *envelope_in) {
     RETURN_IF_NOT_CONNECTED(self->state);
     message_member_list_t msg;
-    if (message_member_list_decode(envelope_in->buffer, envelope_in->buffer_size, &msg) < 0) return -1;
+    int decode_result = message_member_list_decode(envelope_in->buffer, envelope_in->buffer_size, &msg);
+    if (decode_result < 0) {
+        return decode_result;
+    };
 
     // Update our local collection of members with arrived records.
     cluster_member_map_put(&self->members, msg.members, msg.members_n);
@@ -408,13 +420,16 @@ static int gossip_handle_member_list(pittacus_gossip_t *self, const message_enve
     gossip_enqueue_ack(self, msg.header.sequence_num, envelope_in->sender, envelope_in->sender_len);
 
     message_member_list_destroy(&msg);
-    return 0;
+    return PITTACUS_ERR_NONE;
 }
 
 static int gossip_handle_data(pittacus_gossip_t *self, const message_envelope_in_t *envelope_in) {
     RETURN_IF_NOT_CONNECTED(self->state);
     message_data_t msg;
-    if (message_data_decode(envelope_in->buffer, envelope_in->buffer_size, &msg) < 0) return -1;
+    int decode_result = message_data_decode(envelope_in->buffer, envelope_in->buffer_size, &msg);
+    if (decode_result < 0) {
+        return decode_result;
+    }
 
     // Send ACK message back to qsender.
     gossip_enqueue_ack(self, msg.header.sequence_num, envelope_in->sender, envelope_in->sender_len);
@@ -429,20 +444,23 @@ static int gossip_handle_data(pittacus_gossip_t *self, const message_envelope_in
         // Enqueue the same message to send it to N random members later.
         return gossip_enqueue_message(self, MESSAGE_DATA_TYPE, &msg, NULL, 0);
     }
-    return 0;
+    return PITTACUS_ERR_NONE;
 }
 
 static int gossip_handle_ack(pittacus_gossip_t *self, const message_envelope_in_t *envelope_in) {
     RETURN_IF_NOT_CONNECTED(self->state);
     message_ack_t msg;
-    if (message_ack_decode(envelope_in->buffer, envelope_in->buffer_size, &msg) < 0) return -1;
+    int decode_result = message_ack_decode(envelope_in->buffer, envelope_in->buffer_size, &msg);
+    if (decode_result < 0) {
+        return decode_result;
+    }
 
     // Removing the processed message from the outbound queue.
     message_envelope_out_t *ack_envelope =
             gossip_envelope_find_by_sequence_num(&self->outbound_messages,
                                                  msg.ack_sequence_num);
     if (ack_envelope != NULL) gossip_envelope_remove(&self->outbound_messages, ack_envelope);
-    return 0;
+    return PITTACUS_ERR_NONE;
 }
 
 static int gossip_handle_new_message(pittacus_gossip_t *self, const message_envelope_in_t *envelope_in) {
@@ -465,7 +483,7 @@ static int gossip_handle_new_message(pittacus_gossip_t *self, const message_enve
             result = gossip_handle_ack(self, envelope_in);
             break;
         default:
-            return -1;
+            return PITTACUS_ERR_INVALID_MESSAGE;
     }
     return result;
 }
@@ -475,7 +493,7 @@ static int pittacus_gossip_init(pittacus_gossip_t *self,
                                 data_receiver_t data_receiver, void *data_receiver_context) {
     self->socket = pt_socket_datagram((const pt_sockaddr_storage *) self_addr->addr, self_addr->addr_len);
     if (self->socket < 0) {
-        return -1;
+        return PITTACUS_ERR_INIT_FAILED;
     }
 
     self->output_buffer_offset = 0;
@@ -492,12 +510,14 @@ static int pittacus_gossip_init(pittacus_gossip_t *self,
 
     self->data_receiver = data_receiver;
     self->data_receiver_context = data_receiver_context;
-    return 0;
+    return PITTACUS_ERR_NONE;
 }
 
 pittacus_gossip_t *pittacus_gossip_create(const pittacus_addr_t *self_addr,
                                           data_receiver_t data_receiver, void *data_receiver_context) {
     pittacus_gossip_t *result = (pittacus_gossip_t *) malloc(sizeof(pittacus_gossip_t));
+    if (result == NULL) return NULL;
+
     int int_res = pittacus_gossip_init(result, self_addr, data_receiver, data_receiver_context);
     if (int_res < 0) {
         free(result);
@@ -516,11 +536,11 @@ int pittacus_gossip_destroy(pittacus_gossip_t *self) {
     cluster_member_map_destroy(&self->members);
 
     free(self);
-    return 0;
+    return PITTACUS_ERR_NONE;
 }
 
 int pittacus_gossip_join(pittacus_gossip_t *self, const pittacus_addr_t *seed_nodes, uint16_t seed_nodes_len) {
-    if (self->state != STATE_INITIALIZED) return -1;
+    if (self->state != STATE_INITIALIZED) return PITTACUS_ERR_BAD_STATE;
     if (seed_nodes == NULL || seed_nodes_len == 0) {
         // No seed nodes were provided.
         self->state = STATE_CONNECTED;
@@ -532,11 +552,11 @@ int pittacus_gossip_join(pittacus_gossip_t *self, const pittacus_addr_t *seed_no
         }
         self->state = STATE_JOINING;
     }
-    return 0;
+    return PITTACUS_ERR_NONE;
 }
 
 int pittacus_gossip_process_receive(pittacus_gossip_t *self) {
-    if (self->state != STATE_JOINING && self->state != STATE_CONNECTED) return -3;
+    if (self->state != STATE_JOINING && self->state != STATE_CONNECTED) return PITTACUS_ERR_BAD_STATE;
 
     pt_sockaddr_storage addr;
     pt_socklen_t addr_len = sizeof(pt_sockaddr_storage);
@@ -554,7 +574,7 @@ int pittacus_gossip_process_receive(pittacus_gossip_t *self) {
 }
 
 int pittacus_gossip_process_send(pittacus_gossip_t *self) {
-    if (self->state != STATE_JOINING && self->state != STATE_CONNECTED) return -3;
+    if (self->state != STATE_JOINING && self->state != STATE_CONNECTED) return PITTACUS_ERR_BAD_STATE;
     message_envelope_out_t *head = self->outbound_messages.head;
     int msg_sent = 0;
     while (head != NULL) {
