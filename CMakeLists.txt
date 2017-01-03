@@ -30,3 +30,7 @@ install(FILES ${INSTALL_INCLUDE_FILES} DESTINATION include/pittacus)
 install (TARGETS pittacus pittacus_static
          LIBRARY DESTINATION lib
          ARCHIVE DESTINATION lib)
+
+# Build demos.
+add_executable(demo_seed_node demos/demo_seed_node.c $<TARGET_OBJECTS:pittacus_obj>)
+add_executable(demo_node demos/demo_node.c $<TARGET_OBJECTS:pittacus_obj>)
