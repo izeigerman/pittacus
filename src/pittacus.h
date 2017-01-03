@@ -13,7 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#ifndef PITTACUS_PITTACUS_H
+#define PITTACUS_PITTACUS_H
 
-int main() {
-    return 0;
-}
+#include "gossip.h"
+
+#endif //PITTACUS_PITTACUS_H

@@ -17,7 +17,6 @@
 #include "network.h"
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <sys/time.h>
 
 uint64_t pt_time() {

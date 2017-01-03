@@ -18,5 +18,15 @@ project(pittacus)
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
 
-set(SOURCE_FILES main.c messages.c member.c config.c gossip.c network.c utils.c vector_clock.c)
-add_executable(pittacus ${SOURCE_FILES})
+include_directories(src)
+file(GLOB SOURCE_FILES "src/*.c")
+
+add_library(pittacus_obj OBJECT ${SOURCE_FILES})
+add_library(pittacus SHARED $<TARGET_OBJECTS:pittacus_obj>)
+add_library(pittacus_static STATIC $<TARGET_OBJECTS:pittacus_obj>)
+
+install(DIRECTORY ./src/ DESTINATION include/pittacus
+        FILES_MATCHING PATTERN "*.h")
+install (TARGETS pittacus pittacus_static
+         LIBRARY DESTINATION lib
+         ARCHIVE DESTINATION lib)
