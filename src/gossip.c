@@ -15,6 +15,9 @@
  */
 #include "gossip.h"
 #include "messages.h"
+#include "member.h"
+#include "vector_clock.h"
+#include "config.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -44,6 +47,33 @@ typedef struct message_envelope_out {
     struct message_envelope_out *next;
 } message_envelope_out_t;
 
+typedef struct message_queue {
+    message_envelope_out_t *head;
+    message_envelope_out_t *tail;
+} message_queue_t;
+
+#define INPUT_BUFFER_SIZE MESSAGE_MAX_SIZE
+#define OUTPUT_BUFFER_SIZE MAX_OUTPUT_MESSAGES * MESSAGE_MAX_SIZE
+struct pittacus_gossip {
+    pt_socket_fd socket;
+
+    uint8_t input_buffer[INPUT_BUFFER_SIZE];
+    uint8_t output_buffer[OUTPUT_BUFFER_SIZE];
+    size_t output_buffer_offset;
+
+    message_queue_t outbound_messages;
+
+    uint32_t sequence_num;
+    uint32_t data_counter;
+    vector_clock_t data_version;
+
+    pittacus_gossip_state_t state;
+    cluster_member_t self_address;
+    cluster_member_map_t members;
+
+    data_receiver_t data_receiver;
+    void *data_receiver_context;
+};
 
 static message_envelope_out_t *gossip_envelope_create(
         uint32_t sequence_number,
@@ -118,7 +148,7 @@ static message_envelope_out_t *gossip_envelope_find_by_sequence_num(message_queu
     return NULL;
 }
 
-static const uint8_t *gossip_find_available_output_buffer(gossip_descriptor_t *self) {
+static const uint8_t *gossip_find_available_output_buffer(pittacus_gossip_t *self) {
     pt_bool_t buffer_is_occupied[MAX_OUTPUT_MESSAGES];
     memset(buffer_is_occupied, 0, MAX_OUTPUT_MESSAGES * sizeof(pt_bool_t));
 
@@ -152,7 +182,7 @@ static const uint8_t *gossip_find_available_output_buffer(gossip_descriptor_t *s
     return chosen_buffer;
 }
 
-static uint32_t gossip_update_output_buffer_offset(gossip_descriptor_t *self) {
+static uint32_t gossip_update_output_buffer_offset(pittacus_gossip_t *self) {
     uint32_t offset = 0;
     if (self->outbound_messages.head != NULL) {
         offset = gossip_find_available_output_buffer(self) - self->output_buffer;
@@ -161,7 +191,7 @@ static uint32_t gossip_update_output_buffer_offset(gossip_descriptor_t *self) {
     return offset;
 }
 
-static int gossip_enqueue_to_outbound(gossip_descriptor_t *self,
+static int gossip_enqueue_to_outbound(pittacus_gossip_t *self,
                                       const uint8_t *buffer,
                                       size_t buffer_size,
                                       uint16_t max_attempts,
@@ -199,7 +229,7 @@ static int gossip_enqueue_to_outbound(gossip_descriptor_t *self,
     return 0;
 }
 
-static int gossip_enqueue_message(gossip_descriptor_t *self,
+static int gossip_enqueue_message(pittacus_gossip_t *self,
                                   uint8_t msg_type,
                                   const void *msg,
                                   const pt_sockaddr_storage *recipient,
@@ -244,7 +274,7 @@ static int gossip_enqueue_message(gossip_descriptor_t *self,
     return gossip_enqueue_to_outbound(self, buffer, encode_result, max_attempts, recipient, recipient_len);
 }
 
-static int gossip_enqueue_ack(gossip_descriptor_t *self,
+static int gossip_enqueue_ack(pittacus_gossip_t *self,
                               uint32_t sequence_num,
                               const pt_sockaddr_storage *recipient,
                               pt_socklen_t recipient_len) {
@@ -255,7 +285,7 @@ static int gossip_enqueue_ack(gossip_descriptor_t *self,
                                   recipient, recipient_len);
 }
 
-static int gossip_enqueue_welcome(gossip_descriptor_t *self,
+static int gossip_enqueue_welcome(pittacus_gossip_t *self,
                                   uint32_t hello_sequence_num,
                                   const pt_sockaddr_storage *recipient,
                                   pt_socklen_t recipient_len) {
@@ -267,7 +297,7 @@ static int gossip_enqueue_welcome(gossip_descriptor_t *self,
                                   recipient, recipient_len);
 }
 
-static int gossip_enqueue_hello(gossip_descriptor_t *self,
+static int gossip_enqueue_hello(pittacus_gossip_t *self,
                                 const pt_sockaddr_storage *recipient,
                                 pt_socklen_t recipient_len) {
     message_hello_t hello_msg;
@@ -277,7 +307,7 @@ static int gossip_enqueue_hello(gossip_descriptor_t *self,
                                   recipient, recipient_len);
 }
 
-static int gossip_enqueue_data(gossip_descriptor_t *self,
+static int gossip_enqueue_data(pittacus_gossip_t *self,
                                const uint8_t *data,
                                uint32_t data_size,
                                const pt_sockaddr_storage *recipient,
@@ -296,7 +326,7 @@ static int gossip_enqueue_data(gossip_descriptor_t *self,
                                   recipient, recipient_len);
 }
 
-static int gossip_enqueue_member_list(gossip_descriptor_t *self,
+static int gossip_enqueue_member_list(pittacus_gossip_t *self,
                                       const pt_sockaddr_storage *recipient,
                                       pt_socklen_t recipient_len) {
     message_member_list_t member_list_msg;
@@ -325,7 +355,7 @@ static int gossip_enqueue_member_list(gossip_descriptor_t *self,
     return result;
 }
 
-static int gossip_handle_hello(gossip_descriptor_t *self, const message_envelope_in_t *envelope_in) {
+static int gossip_handle_hello(pittacus_gossip_t *self, const message_envelope_in_t *envelope_in) {
     RETURN_IF_NOT_CONNECTED(self->state);
     message_hello_t msg;
     if (message_hello_decode(envelope_in->buffer, envelope_in->buffer_size, &msg) < 0) return -1;
@@ -347,7 +377,7 @@ static int gossip_handle_hello(gossip_descriptor_t *self, const message_envelope
     return 0;
 }
 
-static int gossip_handle_welcome(gossip_descriptor_t *self, const message_envelope_in_t *envelope_in) {
+static int gossip_handle_welcome(pittacus_gossip_t *self, const message_envelope_in_t *envelope_in) {
     message_welcome_t msg;
     if (message_welcome_decode(envelope_in->buffer, envelope_in->buffer_size, &msg) < 0) return -1;
     self->state = STATE_CONNECTED;
@@ -366,7 +396,7 @@ static int gossip_handle_welcome(gossip_descriptor_t *self, const message_envelo
     return 0;
 }
 
-static int gossip_handle_member_list(gossip_descriptor_t *self, const message_envelope_in_t *envelope_in) {
+static int gossip_handle_member_list(pittacus_gossip_t *self, const message_envelope_in_t *envelope_in) {
     RETURN_IF_NOT_CONNECTED(self->state);
     message_member_list_t msg;
     if (message_member_list_decode(envelope_in->buffer, envelope_in->buffer_size, &msg) < 0) return -1;
@@ -381,7 +411,7 @@ static int gossip_handle_member_list(gossip_descriptor_t *self, const message_en
     return 0;
 }
 
-static int gossip_handle_data(gossip_descriptor_t *self, const message_envelope_in_t *envelope_in) {
+static int gossip_handle_data(pittacus_gossip_t *self, const message_envelope_in_t *envelope_in) {
     RETURN_IF_NOT_CONNECTED(self->state);
     message_data_t msg;
     if (message_data_decode(envelope_in->buffer, envelope_in->buffer_size, &msg) < 0) return -1;
@@ -402,7 +432,7 @@ static int gossip_handle_data(gossip_descriptor_t *self, const message_envelope_
     return 0;
 }
 
-static int gossip_handle_ack(gossip_descriptor_t *self, const message_envelope_in_t *envelope_in) {
+static int gossip_handle_ack(pittacus_gossip_t *self, const message_envelope_in_t *envelope_in) {
     RETURN_IF_NOT_CONNECTED(self->state);
     message_ack_t msg;
     if (message_ack_decode(envelope_in->buffer, envelope_in->buffer_size, &msg) < 0) return -1;
@@ -415,7 +445,7 @@ static int gossip_handle_ack(gossip_descriptor_t *self, const message_envelope_i
     return 0;
 }
 
-static int gossip_handle_new_message(gossip_descriptor_t *self, const message_envelope_in_t *envelope_in) {
+static int gossip_handle_new_message(pittacus_gossip_t *self, const message_envelope_in_t *envelope_in) {
     int message_type = message_type_decode(envelope_in->buffer, envelope_in->buffer_size);
     int result = 0;
     switch(message_type) {
@@ -440,9 +470,9 @@ static int gossip_handle_new_message(gossip_descriptor_t *self, const message_en
     return result;
 }
 
-int gossip_init(gossip_descriptor_t *self,
-                const cluster_node_addr_t *self_addr,
-                data_receiver_t data_receiver, void *data_receiver_context) {
+static int pittacus_gossip_init(pittacus_gossip_t *self,
+                                const pittacus_addr_t *self_addr,
+                                data_receiver_t data_receiver, void *data_receiver_context) {
     self->socket = pt_socket_datagram((const pt_sockaddr_storage *) self_addr->addr, self_addr->addr_len);
     if (self->socket < 0) {
         return -1;
@@ -465,7 +495,18 @@ int gossip_init(gossip_descriptor_t *self,
     return 0;
 }
 
-int gossip_destroy(gossip_descriptor_t *self) {
+pittacus_gossip_t *pittacus_gossip_create(const pittacus_addr_t *self_addr,
+                                          data_receiver_t data_receiver, void *data_receiver_context) {
+    pittacus_gossip_t *result = (pittacus_gossip_t *) malloc(sizeof(pittacus_gossip_t));
+    int int_res = pittacus_gossip_init(result, self_addr, data_receiver, data_receiver_context);
+    if (int_res < 0) {
+        free(result);
+        return NULL;
+    }
+    return result;
+}
+
+int pittacus_gossip_destroy(pittacus_gossip_t *self) {
     pt_close(self->socket);
 
     gossip_envelope_clear(&self->outbound_messages);
@@ -473,17 +514,19 @@ int gossip_destroy(gossip_descriptor_t *self) {
     self->state = STATE_DESTROYED;
     cluster_member_destroy(&self->self_address);
     cluster_member_map_destroy(&self->members);
+
+    free(self);
     return 0;
 }
 
-int gossip_join(gossip_descriptor_t *self, const cluster_node_addr_t *seed_nodes, uint16_t seed_nodes_len) {
+int pittacus_gossip_join(pittacus_gossip_t *self, const pittacus_addr_t *seed_nodes, uint16_t seed_nodes_len) {
     if (self->state != STATE_INITIALIZED) return -1;
     if (seed_nodes == NULL || seed_nodes_len == 0) {
         // No seed nodes were provided.
         self->state = STATE_CONNECTED;
     } else {
         for (int i = 0; i < seed_nodes_len; ++i) {
-            cluster_node_addr_t node = seed_nodes[i];
+            pittacus_addr_t node = seed_nodes[i];
             int res = gossip_enqueue_hello(self, (const pt_sockaddr_storage *) node.addr, node.addr_len);
             if (res < 0) return res;
         }
@@ -492,7 +535,7 @@ int gossip_join(gossip_descriptor_t *self, const cluster_node_addr_t *seed_nodes
     return 0;
 }
 
-int gossip_process_receive(gossip_descriptor_t *self) {
+int pittacus_gossip_process_receive(pittacus_gossip_t *self) {
     if (self->state != STATE_JOINING && self->state != STATE_CONNECTED) return -3;
 
     pt_sockaddr_storage addr;
@@ -510,7 +553,7 @@ int gossip_process_receive(gossip_descriptor_t *self) {
     return gossip_handle_new_message(self, &envelope);
 }
 
-int gossip_process_send(gossip_descriptor_t *self) {
+int pittacus_gossip_process_send(pittacus_gossip_t *self) {
     if (self->state != STATE_JOINING && self->state != STATE_CONNECTED) return -3;
     message_envelope_out_t *head = self->outbound_messages.head;
     int msg_sent = 0;
@@ -552,7 +595,15 @@ int gossip_process_send(gossip_descriptor_t *self) {
     return msg_sent;
 }
 
-int gossip_send_data(gossip_descriptor_t *self, const uint8_t *data, uint32_t data_size) {
+int pittacus_gossip_send_data(pittacus_gossip_t *self, const uint8_t *data, uint32_t data_size) {
     RETURN_IF_NOT_CONNECTED(self->state);
     return gossip_enqueue_data(self, data, data_size, NULL, 0);
+}
+
+pittacus_gossip_state_t pittacus_gossip_state(pittacus_gossip_t *self) {
+    return self->state;
+}
+
+pt_socket_fd pittacus_gossip_socket_fd(pittacus_gossip_t *self) {
+    return self->socket;
 }

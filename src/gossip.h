@@ -17,69 +17,41 @@
 #define PITTACUS_GOSSIP_H
 
 #include "network.h"
-#include "member.h"
-#include "vector_clock.h"
-#include "config.h"
 
-#define INPUT_BUFFER_SIZE MESSAGE_MAX_SIZE
-#define OUTPUT_BUFFER_SIZE MAX_OUTPUT_MESSAGES * MESSAGE_MAX_SIZE
-
-typedef struct message_envelope_out message_envelope_out_t;
-
-typedef struct message_queue {
-    message_envelope_out_t *head;
-    message_envelope_out_t *tail;
-} message_queue_t;
-
-typedef enum member_state {
+typedef enum pittacus_gossip_state {
     STATE_INITIALIZED,
     STATE_JOINING,
     STATE_CONNECTED,
     STATE_LEAVING,
     STATE_DISCONNECTED,
     STATE_DESTROYED
-} member_state_t;
+} pittacus_gossip_state_t;
 
 typedef void (*data_receiver_t)(void *context, const uint8_t *buffer, size_t buffer_size);
 
-typedef struct gossip_descriptor {
-    pt_socket_fd socket;
-
-    uint8_t input_buffer[INPUT_BUFFER_SIZE];
-    uint8_t output_buffer[OUTPUT_BUFFER_SIZE];
-    size_t output_buffer_offset;
-
-    message_queue_t outbound_messages;
-
-    uint32_t sequence_num;
-    uint32_t data_counter;
-    vector_clock_t data_version;
-
-    member_state_t state;
-    cluster_member_t self_address;
-    cluster_member_map_t members;
-
-    data_receiver_t data_receiver;
-    void *data_receiver_context;
-} gossip_descriptor_t;
-
-typedef struct cluster_node_addr {
+typedef struct pittacus_addr {
     const pt_sockaddr *addr;
     socklen_t addr_len;
-} cluster_node_addr_t;
+} pittacus_addr_t;
 
-int gossip_init(gossip_descriptor_t *self,
-                const cluster_node_addr_t *self_addr,
-                data_receiver_t data_receiver, void *data_receiver_context);
+typedef struct pittacus_gossip pittacus_gossip_t;
 
-int gossip_destroy(gossip_descriptor_t *self);
+pittacus_gossip_t *pittacus_gossip_create(const pittacus_addr_t *self_addr,
+                                          data_receiver_t data_receiver, void *data_receiver_context);
 
-int gossip_join(gossip_descriptor_t *self, const cluster_node_addr_t *seed_nodes, uint16_t seed_nodes_len);
+int pittacus_gossip_destroy(pittacus_gossip_t *self);
 
-int gossip_process_receive(gossip_descriptor_t *self);
+int pittacus_gossip_join(pittacus_gossip_t *self,
+                         const pittacus_addr_t *seed_nodes, uint16_t seed_nodes_len);
 
-int gossip_process_send(gossip_descriptor_t *self);
+int pittacus_gossip_process_receive(pittacus_gossip_t *self);
 
-int gossip_send_data(gossip_descriptor_t *self, const uint8_t *data, uint32_t data_size);
+int pittacus_gossip_process_send(pittacus_gossip_t *self);
+
+int pittacus_gossip_send_data(pittacus_gossip_t *self, const uint8_t *data, uint32_t data_size);
+
+pittacus_gossip_state_t pittacus_gossip_state(pittacus_gossip_t *self);
+
+pt_socket_fd pittacus_gossip_socket_fd(pittacus_gossip_t *self);
 
 #endif //PITTACUS_GOSSIP_H

@@ -20,6 +20,8 @@
 #include "member.h"
 #include "vector_clock.h"
 
+#define PROTOCOL_ID_LENGTH 5
+
 typedef struct message_header {
     char protocol_id[PROTOCOL_ID_LENGTH];
     uint8_t message_type;

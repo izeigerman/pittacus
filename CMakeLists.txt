@@ -25,8 +25,8 @@ add_library(pittacus_obj OBJECT ${SOURCE_FILES})
 add_library(pittacus SHARED $<TARGET_OBJECTS:pittacus_obj>)
 add_library(pittacus_static STATIC $<TARGET_OBJECTS:pittacus_obj>)
 
-install(DIRECTORY ./src/ DESTINATION include/pittacus
-        FILES_MATCHING PATTERN "*.h")
+set(INSTALL_INCLUDE_FILES ./src/gossip.h ./src/network.h ./src/config.h)
+install(FILES ${INSTALL_INCLUDE_FILES} DESTINATION include/pittacus)
 install (TARGETS pittacus pittacus_static
          LIBRARY DESTINATION lib
          ARCHIVE DESTINATION lib)

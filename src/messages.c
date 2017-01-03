@@ -23,6 +23,8 @@
 
 #define RETURN_IF_INVALID_PAYLOAD(t, r) if (!message_is_payload_valid(buffer, buffer_size, (t))) return r;
 
+const char PROTOCOL_ID[PROTOCOL_ID_LENGTH] = { 'p', 't', 'c', 's', '\0' };
+
 int message_type_decode(const uint8_t *buffer, size_t buffer_size) {
     if (buffer_size < sizeof(message_header_t)) return -1;
     return *(buffer + PROTOCOL_ID_LENGTH);

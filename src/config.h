@@ -17,8 +17,6 @@
 #define PITTACUS_CONFIG_H
 
 #define PROTOCOL_VERSION 0x01
-#define PROTOCOL_ID_LENGTH 5
-extern const char PROTOCOL_ID[PROTOCOL_ID_LENGTH];
 
 /** The interval in milliseconds between retry attempts. */
 #define MESSAGE_RETRY_INTERVAL 10000
