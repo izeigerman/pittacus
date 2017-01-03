@@ -18,6 +18,10 @@
 
 #include "network.h"
 
+#ifdef  __cplusplus
+extern "C" {
+#endif
+
 typedef struct pittacus_gossip pittacus_gossip_t;
 
 typedef enum pittacus_gossip_state {
@@ -131,5 +135,9 @@ pittacus_gossip_state_t pittacus_gossip_state(pittacus_gossip_t *self);
  * @return a socket descriptor.
  */
 pt_socket_fd pittacus_gossip_socket_fd(pittacus_gossip_t *self);
+
+#ifdef  __cplusplus
+} // extern "C"
+#endif
 
 #endif //PITTACUS_GOSSIP_H

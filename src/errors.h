@@ -16,6 +16,10 @@
 #ifndef PITTACUS_ERRORS_H
 #define PITTACUS_ERRORS_H
 
+#ifdef  __cplusplus
+extern "C" {
+#endif
+
 typedef enum pittacus_error {
     PITTACUS_ERR_NONE = 0,
     PITTACUS_ERR_INIT_FAILED = -1,
@@ -25,5 +29,9 @@ typedef enum pittacus_error {
     PITTACUS_ERR_BUFFER_NOT_ENOUGH = -5,
     PITTACUS_ERR_NOT_FOUND = -6,
 } pittacus_error_t;
+
+#ifdef  __cplusplus
+} // extern "C"
+#endif
 
 #endif //PITTACUS_ERRORS_H

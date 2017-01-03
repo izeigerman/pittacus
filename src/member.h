@@ -19,6 +19,10 @@
 #include <stdint.h>
 #include "network.h"
 
+#ifdef  __cplusplus
+extern "C" {
+#endif
+
 typedef struct cluster_member {
     uint16_t version;
     uint32_t uid;
@@ -48,5 +52,9 @@ size_t cluster_member_map_random_member(cluster_member_map_t *members,
                                         cluster_member_t **reservoir, size_t reservoir_size);
 void cluster_member_map_item_destroy(cluster_member_t *member);
 void cluster_member_map_destroy(cluster_member_map_t *members);
+
+#ifdef  __cplusplus
+} // extern "C"
+#endif
 
 #endif //PITTACUS_MEMBER_H

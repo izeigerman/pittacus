@@ -20,6 +20,10 @@
 #include "member.h"
 #include "utils.h"
 
+#ifdef  __cplusplus
+extern "C" {
+#endif
+
 #define MAX_VECTOR_SIZE 20
 #define MEMBER_ID_SIZE 12
 
@@ -82,5 +86,9 @@ vector_clock_comp_res_t vector_clock_compare_with_record(vector_clock_t *clock,
 
 int vector_clock_record_decode(const uint8_t *buffer, size_t buffer_size, vector_record_t *result);
 int vector_clock_record_encode(const vector_record_t *record, uint8_t *buffer, size_t buffer_size);
+
+#ifdef  __cplusplus
+} // extern "C"
+#endif
 
 #endif //PITTACUS_VECTOR_CLOCK_H

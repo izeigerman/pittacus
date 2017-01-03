@@ -16,6 +16,10 @@
 #ifndef PITTACUS_CONFIG_H
 #define PITTACUS_CONFIG_H
 
+#ifdef  __cplusplus
+extern "C" {
+#endif
+
 #define PROTOCOL_VERSION 0x01
 
 /** The interval in milliseconds between retry attempts. */
@@ -31,5 +35,8 @@
 /** The maximum number of unique messages that can be stored in the outbound message queue. */
 #define MAX_OUTPUT_MESSAGES 25
 
+#ifdef  __cplusplus
+} // extern "C"
+#endif
 
 #endif //PITTACUS_CONFIG_H

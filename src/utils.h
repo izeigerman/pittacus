@@ -18,6 +18,10 @@
 
 #include <stdint.h>
 
+#ifdef  __cplusplus
+extern "C" {
+#endif
+
 uint64_t pt_time();
 uint32_t pt_random();
 
@@ -30,5 +34,9 @@ typedef enum pt_bool {
     PT_FALSE = 0,
     PT_TRUE = 1
 } pt_bool_t;
+
+#ifdef  __cplusplus
+} // extern "C"
+#endif
 
 #endif //PITTACUS_UTILS_H

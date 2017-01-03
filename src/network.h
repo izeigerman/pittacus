@@ -21,6 +21,10 @@
 #include <sys/types.h>
 #include <netinet/in.h>
 
+#ifdef  __cplusplus
+extern "C" {
+#endif
+
 #define PT_NTOHS(i) ntohs((i))
 #define PT_NTOHL(i) ntohl((i))
 #define PT_HTONS(i) htons((i))
@@ -45,5 +49,9 @@ ssize_t pt_send_to(pt_socket_fd fd, const uint8_t *buffer, size_t buffer_size, c
 void pt_close(pt_socket_fd fd);
 
 int pt_get_sock_name(pt_socket_fd fd, pt_sockaddr_storage *addr, pt_socklen_t *addr_len);
+
+#ifdef  __cplusplus
+} // extern "C"
+#endif
 
 #endif //PITTACUS_NETWORK_UTILS_H

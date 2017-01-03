@@ -20,6 +20,10 @@
 #include "member.h"
 #include "vector_clock.h"
 
+#ifdef  __cplusplus
+extern "C" {
+#endif
+
 #define PROTOCOL_ID_LENGTH 5
 
 typedef struct message_header {
@@ -81,5 +85,9 @@ int message_welcome_encode(const message_welcome_t *msg, uint8_t *buffer, size_t
 int message_data_encode(const message_data_t *msg, uint8_t *buffer, size_t buffer_size);
 int message_member_list_encode(const message_member_list_t *msg, uint8_t *buffer, size_t buffer_size);
 int message_ack_encode(const message_ack_t *msg, uint8_t *buffer, size_t buffer_size);
+
+#ifdef  __cplusplus
+} // extern "C"
+#endif
 
 #endif //PITTACUS_MESSAGES_H
