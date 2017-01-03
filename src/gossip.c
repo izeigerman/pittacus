@@ -440,7 +440,7 @@ static int gossip_handle_data(pittacus_gossip_t *self, const message_envelope_in
 
     if (res == VC_BEFORE) {
         // Invoke the data receiver callback specified by the user.
-        self->data_receiver(self->data_receiver_context, msg.data, msg.data_size);
+        self->data_receiver(self->data_receiver_context, self, msg.data, msg.data_size);
         // Enqueue the same message to send it to N random members later.
         return gossip_enqueue_message(self, MESSAGE_DATA_TYPE, &msg, NULL, 0);
     }
@@ -496,6 +496,13 @@ static int pittacus_gossip_init(pittacus_gossip_t *self,
         return PITTACUS_ERR_INIT_FAILED;
     }
 
+    pt_sockaddr_storage updated_self_addr;
+    pt_socklen_t updated_self_addr_size = sizeof(pt_sockaddr_storage);
+    if (pt_get_sock_name(self->socket, &updated_self_addr, &updated_self_addr_size) < 0) {
+        pt_close(self->socket);
+        return PITTACUS_ERR_INIT_FAILED;
+    }
+
     self->output_buffer_offset = 0;
 
     self->outbound_messages = (message_queue_t ) { .head = NULL, .tail = NULL };
@@ -505,7 +512,7 @@ static int pittacus_gossip_init(pittacus_gossip_t *self,
     vector_clock_init(&self->data_version);
 
     self->state = STATE_INITIALIZED;
-    cluster_member_init(&self->self_address, (const pt_sockaddr_storage *) self_addr->addr, self_addr->addr_len);
+    cluster_member_init(&self->self_address, &updated_self_addr, updated_self_addr_size);
     cluster_member_map_init(&self->members);
 
     self->data_receiver = data_receiver;

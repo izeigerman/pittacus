@@ -18,6 +18,8 @@
 
 #include "network.h"
 
+typedef struct pittacus_gossip pittacus_gossip_t;
+
 typedef enum pittacus_gossip_state {
     STATE_INITIALIZED,
     STATE_JOINING,
@@ -32,19 +34,19 @@ typedef enum pittacus_gossip_state {
  *
  * @param context a reference to the arbitrary context specified
  *                by a user.
+ * @param gossip a reference to the gossip descriptor instance.
  * @param buffer a reference to the buffer where the data payload
  *               is stored.
  * @param buffer_size a size of the data buffer.
  * @return Void.
  */
-typedef void (*data_receiver_t)(void *context, const uint8_t *buffer, size_t buffer_size);
+typedef void (*data_receiver_t)(void *context, pittacus_gossip_t *gossip,
+                                const uint8_t *buffer, size_t buffer_size);
 
 typedef struct pittacus_addr {
     const pt_sockaddr *addr; /**< pointer to the address instance. */
     socklen_t addr_len; /**< size of the address. */
 } pittacus_addr_t;
-
-typedef struct pittacus_gossip pittacus_gossip_t;
 
 /**
  * Creates a new gossip descriptor instance.
