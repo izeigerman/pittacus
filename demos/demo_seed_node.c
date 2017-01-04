@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
     // Create a new Pittacus descriptor instance.
     pittacus_gossip_t *gossip = pittacus_gossip_create(&self_addr, &data_receiver, NULL);
     if (gossip == NULL) {
-        fprintf(stderr, "Gossip initialization failed\n");
+        fprintf(stderr, "Gossip initialization failed: %s\n", strerror(errno));
         return -1;
     }
 

@@ -20,20 +20,39 @@
 extern "C" {
 #endif
 
+#ifndef PROTOCOL_VERSION
 #define PROTOCOL_VERSION 0x01
+#endif
 
+#ifndef MESSAGE_RETRY_INTERVAL
 /** The interval in milliseconds between retry attempts. */
 #define MESSAGE_RETRY_INTERVAL 10000
+#endif
+
+#ifndef MESSAGE_RETRY_ATTEMPTS
 /** The maximum number of attempts to deliver a message. */
 #define MESSAGE_RETRY_ATTEMPTS 3
+#endif
+
+#ifndef MEMBER_LIST_SYNC_SIZE
 /** The maximum size of the member list that is shared with a newcomer node. */
 #define MEMBER_LIST_SYNC_SIZE 10
+#endif
+
+#ifndef MESSAGE_RUMOR_FACTOR
 /** The number of members that are used for further gossip propagation. */
 #define MESSAGE_RUMOR_FACTOR 3
+#endif
+
+#ifndef MESSAGE_MAX_SIZE
 /** The maximum supported size of the message including a protocol overhead. */
 #define MESSAGE_MAX_SIZE 512
+#endif
+
+#ifndef MAX_OUTPUT_MESSAGES
 /** The maximum number of unique messages that can be stored in the outbound message queue. */
 #define MAX_OUTPUT_MESSAGES 25
+#endif
 
 #ifdef  __cplusplus
 } // extern "C"
