@@ -311,7 +311,7 @@ static int gossip_enqueue_hello(pittacus_gossip_t *self,
 
 static int gossip_enqueue_data(pittacus_gossip_t *self,
                                const uint8_t *data,
-                               uint32_t data_size,
+                               uint16_t data_size,
                                const pt_sockaddr_storage *recipient,
                                pt_socklen_t recipient_len) {
     // Update the local data version.

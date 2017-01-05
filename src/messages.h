@@ -63,7 +63,7 @@ typedef struct message_ack {
 typedef struct message_data {
     message_header_t header;
     vector_record_t data_version;
-    uint32_t data_size;
+    uint16_t data_size;
     uint8_t *data;
 } message_data_t;
 
