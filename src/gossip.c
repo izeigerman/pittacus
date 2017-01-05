@@ -321,7 +321,7 @@ static int gossip_enqueue_data(pittacus_gossip_t *self,
 
     message_data_t data_msg;
     message_header_init(&data_msg.header, MESSAGE_DATA_TYPE, 0);
-    memcpy(&data_msg.data_version, record, sizeof(vector_record_t));
+    vector_clock_record_copy(&data_msg.data_version, record);
     data_msg.data = (uint8_t *) data;
     data_msg.data_size = data_size;
     return gossip_enqueue_message(self, MESSAGE_DATA_TYPE, &data_msg,

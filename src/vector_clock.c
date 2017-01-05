@@ -18,29 +18,35 @@
 #include "errors.h"
 #include <string.h>
 
-#define MEMBER_ID_ADDR_SIZE MEMBER_ID_SIZE - 4
-
-static void vector_clock_create_member_id(const cluster_member_t *member, uint8_t *result) {
-    // TODO: revisit this offset. It doesn't work properly with IPv6.
-    pt_socklen_t addr_offset = 2; // skip length and family.
+static void vector_clock_create_member_id(const cluster_member_t *member, member_id_t *result) {
+    // copy 4 bytes of address and 2 bytes of port
+    pt_sockaddr_storage *addr = member->address;
+    uint8_t *result_buf = (uint8_t *) result;
+    if (addr->ss_family == AF_INET) {
+        pt_sockaddr_in *addr_in = (pt_sockaddr_in *) addr;
+        memcpy(result_buf, &addr_in->sin_addr, 4);
+        memcpy(result_buf + 4, &addr_in->sin_port, 2);
+    } else {
+        pt_sockaddr_in6 *addr_in6 = (pt_sockaddr_in6 *) addr;
+        memcpy(result, &addr_in6->sin6_addr, 4);
+        memcpy(result_buf + 4, &addr_in6->sin6_port, 2);
+    }
+    // fill the remaining 2 bytes with member's uid.
     uint32_t uid_network = PT_HTONL(member->uid);
-    // copy the last 8 bytes of the address and port.
-    memcpy(result, ((uint8_t *) member->address + addr_offset), MEMBER_ID_ADDR_SIZE);
-    // fill the remaining 4 bytes with member's uid.
-    memcpy(result + MEMBER_ID_ADDR_SIZE, &uid_network, sizeof(uint32_t));
+    memcpy(result_buf + 6, &uid_network, 2);
 }
 
-static int vector_clock_find_by_member_id(const vector_clock_t *clock, const uint8_t *member_id) {
+static int vector_clock_find_by_member_id(const vector_clock_t *clock, const member_id_t *member_id) {
     for (int i = 0; i < clock->size; ++i) {
-        if (memcmp(clock->records[i].member_id, member_id, MEMBER_ID_SIZE) == 0) return i;
+        if (clock->records[i].member_id == *member_id) return i;
     }
     return PITTACUS_ERR_NOT_FOUND;
 }
 
 vector_record_t *vector_clock_find_record(vector_clock_t *clock, const cluster_member_t *member) {
-    uint8_t member_id[MEMBER_ID_SIZE];
-    vector_clock_create_member_id(member, member_id);
-    int idx = vector_clock_find_by_member_id(clock, member_id);
+    member_id_t member_id;
+    vector_clock_create_member_id(member, &member_id);
+    int idx = vector_clock_find_by_member_id(clock, &member_id);
     if (idx < 0) return NULL;
     return &clock->records[idx];
 }
@@ -52,13 +58,13 @@ int vector_clock_init(vector_clock_t *clock) {
 }
 
 static vector_record_t *vector_clock_set_by_id(vector_clock_t *clock,
-                                               const uint8_t *member_id,
+                                               const member_id_t *member_id,
                                                uint32_t seq_num) {
     int idx = vector_clock_find_by_member_id(clock, member_id);
     if (idx < 0) {
         // insert or override the latest record with the new record.
         uint32_t new_idx = clock->current_idx;
-        memcpy(clock->records[new_idx].member_id, member_id, MEMBER_ID_SIZE);
+        clock->records[new_idx].member_id = *member_id;
         clock->records[new_idx].sequence_number = seq_num;
 
         if (clock->size < MAX_VECTOR_SIZE) ++clock->size;
@@ -80,9 +86,15 @@ vector_record_t *vector_clock_increment(vector_clock_t *clock, const cluster_mem
 vector_record_t *vector_clock_set(vector_clock_t *clock,
                                   const cluster_member_t *member,
                                   uint32_t seq_num) {
-    uint8_t member_id[MEMBER_ID_SIZE];
-    vector_clock_create_member_id(member, member_id);
-    return vector_clock_set_by_id(clock, member_id, seq_num);
+    member_id_t member_id;
+    vector_clock_create_member_id(member, &member_id);
+    return vector_clock_set_by_id(clock, &member_id, seq_num);
+}
+
+int vector_clock_record_copy(vector_record_t *dst, const vector_record_t *src) {
+    dst->member_id = src->member_id;
+    dst->sequence_number = src->sequence_number;
+    return PITTACUS_ERR_NONE;
 }
 
 static vector_clock_comp_res_t vector_clock_resolve_comp_result(vector_clock_comp_res_t prev,
@@ -94,11 +106,11 @@ vector_clock_comp_res_t vector_clock_compare_with_record(vector_clock_t *clock,
                                                          const vector_record_t *record,
                                                          pt_bool_t merge) {
     vector_clock_comp_res_t result = VC_EQUAL;
-    int idx = vector_clock_find_by_member_id(clock, record->member_id);
+    int idx = vector_clock_find_by_member_id(clock, &record->member_id);
     if (idx < 0) {
         result = VC_BEFORE;
         if (merge) {
-            vector_clock_set_by_id(clock, record->member_id, record->sequence_number);
+            vector_clock_set_by_id(clock, &record->member_id, record->sequence_number);
         }
     } else {
         uint32_t first_seq_num = clock->records[idx].sequence_number;
@@ -123,7 +135,7 @@ vector_clock_comp_res_t vector_clock_compare(vector_clock_t *first,
     uint32_t second_visited_idxs = 0;
 
     for (int i = 0; i < first->size; ++i) {
-        int second_idx = vector_clock_find_by_member_id(second, first->records[i].member_id);
+        int second_idx = vector_clock_find_by_member_id(second, &first->records[i].member_id);
         second_visited_idxs |= (1 << second_idx);
 
         if (second_idx < 0) {
@@ -152,7 +164,7 @@ vector_clock_comp_res_t vector_clock_compare(vector_clock_t *first,
         if (merge) {
             for (int i = 0; missing_idxs != 0; ++i) {
                 if ((missing_idxs & 0x01) != 0) {
-                    vector_clock_set_by_id(first, second->records[i].member_id,
+                    vector_clock_set_by_id(first, &second->records[i].member_id,
                                            second->records[i].sequence_number);
                 }
                 missing_idxs >>= 1;
@@ -163,26 +175,26 @@ vector_clock_comp_res_t vector_clock_compare(vector_clock_t *first,
 }
 
 int vector_clock_record_decode(const uint8_t *buffer, size_t buffer_size, vector_record_t *result) {
-    if (buffer_size < sizeof(vector_record_t)) return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
+    if (buffer_size < VECTOR_RECORD_SIZE) return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
 
     const uint8_t *cursor = buffer;
     result->sequence_number = uint32_decode(cursor);
     cursor += sizeof(uint32_t);
 
-    memcpy(result->member_id, cursor, MEMBER_ID_SIZE);
+    memcpy(&result->member_id, cursor, MEMBER_ID_SIZE);
     cursor += MEMBER_ID_SIZE;
 
     return cursor - buffer;
 }
 
 int vector_clock_record_encode(const vector_record_t *record, uint8_t *buffer, size_t buffer_size) {
-    if (buffer_size < sizeof(vector_record_t)) return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
+    if (buffer_size < VECTOR_RECORD_SIZE) return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
 
     uint8_t *cursor = buffer;
     uint32_encode(record->sequence_number, cursor);
     cursor += sizeof(uint32_t);
 
-    memcpy(cursor, record->member_id, MEMBER_ID_SIZE);
+    memcpy(cursor, &record->member_id, MEMBER_ID_SIZE);
     cursor += MEMBER_ID_SIZE;
 
     return cursor - buffer;

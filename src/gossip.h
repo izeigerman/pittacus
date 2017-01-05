@@ -59,7 +59,7 @@ typedef struct pittacus_addr {
  *                  for binding as well as for the propagation of this
  *                  node destination address to other nodes.
  *                  Note: don't use "localhost" or INADDR_ANY because other
- *                  nodes won't be able to reach out this node.
+ *                  nodes won't be able to reach out to this node.
  * @param data_receiver a data receiver callback. It's invoked each time when
  *                      a new data message arrives.
  * @param data_receiver_context an arbitrary context that is always passed to

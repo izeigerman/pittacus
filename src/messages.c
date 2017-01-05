@@ -173,7 +173,7 @@ int message_data_decode(const uint8_t *buffer, size_t buffer_size, message_data_
     result->data_size = uint32_decode(cursor);
     cursor += sizeof(uint32_t);
 
-    size_t base_size = sizeof(message_header_t) + sizeof(vector_record_t) + sizeof(uint32_t);
+    size_t base_size = sizeof(message_header_t) + VECTOR_RECORD_SIZE + sizeof(uint32_t);
     size_t expected_size = base_size + result->data_size;
     if (buffer_size != expected_size) return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
 
@@ -185,7 +185,7 @@ int message_data_decode(const uint8_t *buffer, size_t buffer_size, message_data_
 }
 
 int message_data_encode(const message_data_t *msg, uint8_t *buffer, size_t buffer_size) {
-    size_t min_size = sizeof(message_header_t) + sizeof(vector_record_t) + sizeof(uint32_t) + msg->data_size;
+    size_t min_size = sizeof(message_header_t) + VECTOR_RECORD_SIZE + sizeof(uint32_t) + msg->data_size;
     if (buffer_size < min_size) return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
 
     uint8_t *cursor = buffer;

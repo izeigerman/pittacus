@@ -25,11 +25,14 @@ extern "C" {
 #endif
 
 #define MAX_VECTOR_SIZE 20
-#define MEMBER_ID_SIZE 12
+#define MEMBER_ID_SIZE 8
+#define VECTOR_RECORD_SIZE (sizeof(uint32_t) + MEMBER_ID_SIZE)
+
+typedef uint64_t member_id_t;
 
 typedef struct vector_record {
     uint32_t sequence_number;
-    uint8_t member_id[MEMBER_ID_SIZE];
+    member_id_t member_id;
 } vector_record_t;
 
 typedef struct vector_clock {
@@ -49,6 +52,8 @@ int vector_clock_init(vector_clock_t *clock);
 vector_record_t *vector_clock_find_record(vector_clock_t *clock, const cluster_member_t *member);
 vector_record_t *vector_clock_set(vector_clock_t *clock, const cluster_member_t *member, uint32_t seq_num);
 vector_record_t *vector_clock_increment(vector_clock_t *clock, const cluster_member_t *member);
+
+int vector_clock_record_copy(vector_record_t *dst, const vector_record_t *src);
 
 /**
  * Compares 2 vector clocks. If the "merge" parameter is set to true, 2 clocks
