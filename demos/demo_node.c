@@ -65,14 +65,22 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    // Force Pittacus to send a Hello message.
+    if (pittacus_gossip_process_send(gossip) < 0) {
+        fprintf(stderr, "Failed to send hello message to a cluster.\n");
+        pittacus_gossip_destroy(gossip);
+        return -1;
+    }
+
     // Retrieve the socket descriptor.
     pt_socket_fd gossip_fd = pittacus_gossip_socket_fd(gossip);
     struct pollfd gossip_poll_fd = {
         .fd = gossip_fd,
-        .events = POLLIN | POLLOUT,
+        .events = POLLIN,
         .revents = 0
     };
 
+    int poll_timeout = 1000;
     int recv_result = 0;
     int send_result = 0;
     int poll_result = 0;
@@ -81,9 +89,13 @@ int main(int argc, char **argv) {
     while (1) {
         gossip_poll_fd.revents = 0;
 
-        poll_result = poll(&gossip_poll_fd, 1, send_data_interval * 1000);
+        poll_result = poll(&gossip_poll_fd, 1, poll_timeout);
         if (poll_result > 0) {
-            if (gossip_poll_fd.revents & POLLIN) {
+            if (gossip_poll_fd.revents & POLLERR) {
+                fprintf(stderr, "Gossip socket failure: %s\n", strerror(errno));
+                pittacus_gossip_destroy(gossip);
+                return -1;
+            } else if (gossip_poll_fd.revents & POLLIN) {
                 // Tell Pittacus to read a message from the socket.
                 recv_result = pittacus_gossip_process_receive(gossip);
                 if (recv_result < 0) {
@@ -92,31 +104,23 @@ int main(int argc, char **argv) {
                     return -1;
                 }
             }
-            if (gossip_poll_fd.revents & POLLOUT) {
-                // Tell Pittacus to write existing messages to the socket.
-                send_result = pittacus_gossip_process_send(gossip);
-                if (send_result < 0) {
-                    fprintf(stderr, "Gossip send failed: %d\n", recv_result);
-                    pittacus_gossip_destroy(gossip);
-                    return -1;
-                }
-            }
-            if (gossip_poll_fd.revents & POLLERR) {
-                fprintf(stderr, "Gossip socket failure: %s\n", strerror(errno));
-                pittacus_gossip_destroy(gossip);
-                return -1;
-            }
         } else if (poll_result < 0) {
             fprintf(stderr, "Poll failed: %s\n", strerror(errno));
             pittacus_gossip_destroy(gossip);
             return -1;
         }
-
         // Send some data periodically.
         time_t current_time = time(NULL);
         if (previous_data_msg_ts + send_data_interval <= current_time) {
             previous_data_msg_ts = current_time;
             pittacus_gossip_send_data(gossip, (const uint8_t *) DATA_MESSAGE, sizeof(DATA_MESSAGE));
+        }
+        // Tell Pittacus to write existing messages to the socket.
+        send_result = pittacus_gossip_process_send(gossip);
+        if (send_result < 0) {
+            fprintf(stderr, "Gossip send failed: %d\n", recv_result);
+            pittacus_gossip_destroy(gossip);
+            return -1;
         }
     }
     pittacus_gossip_destroy(gossip);
