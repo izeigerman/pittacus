@@ -13,9 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-cmake_minimum_required(VERSION 3.6)
-project(pittacus)
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -std=c99")
 
-add_subdirectory (src)
-add_subdirectory(demos)
+file(GLOB SOURCE_FILES "*.c")
+
+add_library(pittacus_obj OBJECT ${SOURCE_FILES})
+add_library(pittacus SHARED $<TARGET_OBJECTS:pittacus_obj>)
+add_library(pittacus_static STATIC $<TARGET_OBJECTS:pittacus_obj>)
+
+set(INSTALL_INCLUDE_FILES gossip.h network.h config.h errors.h)
+install(FILES ${INSTALL_INCLUDE_FILES} DESTINATION include/pittacus)
+install (TARGETS pittacus pittacus_static
+         LIBRARY DESTINATION lib
+         ARCHIVE DESTINATION lib)
 

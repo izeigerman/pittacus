@@ -13,9 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-cmake_minimum_required(VERSION 3.6)
-project(pittacus)
 
-add_subdirectory (src)
-add_subdirectory(demos)
+include_directories(../src)
+add_executable(demo_seed_node demo_seed_node.c $<TARGET_OBJECTS:pittacus_obj>)
+add_executable(demo_node demo_node.c $<TARGET_OBJECTS:pittacus_obj>)
 
