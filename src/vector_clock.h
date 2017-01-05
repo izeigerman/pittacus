@@ -52,6 +52,7 @@ int vector_clock_init(vector_clock_t *clock);
 vector_record_t *vector_clock_find_record(vector_clock_t *clock, const cluster_member_t *member);
 vector_record_t *vector_clock_set(vector_clock_t *clock, const cluster_member_t *member, uint32_t seq_num);
 vector_record_t *vector_clock_increment(vector_clock_t *clock, const cluster_member_t *member);
+void vector_clock_to_string(const vector_clock_t *clock, char *result);
 
 int vector_clock_record_copy(vector_record_t *dst, const vector_record_t *src);
 

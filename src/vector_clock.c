@@ -17,6 +17,7 @@
 #include "network.h"
 #include "errors.h"
 #include <string.h>
+#include <stdio.h>
 
 static void vector_clock_create_member_id(const cluster_member_t *member, member_id_t *result) {
     // copy 4 bytes of address and 2 bytes of port
@@ -89,6 +90,17 @@ vector_record_t *vector_clock_set(vector_clock_t *clock,
     member_id_t member_id;
     vector_clock_create_member_id(member, &member_id);
     return vector_clock_set_by_id(clock, &member_id, seq_num);
+}
+
+void vector_clock_to_string(const vector_clock_t *clock, char *result) {
+    char *cursor = result;
+    int str_size = 0;
+    for (int i = 0; i < clock->size; ++i) {
+        str_size = sprintf(cursor, "(%llx:%u)  ",
+                           clock->records[i].member_id,
+                           clock->records[i].sequence_number);
+        cursor += str_size - 1;
+    }
 }
 
 int vector_clock_record_copy(vector_record_t *dst, const vector_record_t *src) {
