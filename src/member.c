@@ -158,7 +158,6 @@ void cluster_member_set_destroy(cluster_member_set_t *members) {
 }
 
 int cluster_member_set_remove(cluster_member_set_t *members, cluster_member_t *member) {
-    if (members->size == 0) return 0;
     uint32_t idx = 0;
     while (idx < members->size) {
         if (members->set[idx] == member) {
@@ -178,7 +177,6 @@ int cluster_member_set_remove(cluster_member_set_t *members, cluster_member_t *m
 cluster_member_t *cluster_member_set_find_by_addr(cluster_member_set_t *members,
                                                   const pt_sockaddr_storage *addr,
                                                   pt_socklen_t addr_size) {
-    if (members->size == 0) return NULL;
     for (int i = 0; i < members->size; ++i) {
         if (memcmp(members->set[i]->address, addr, addr_size) == 0) return members->set[i];
     }
