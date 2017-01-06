@@ -197,50 +197,36 @@ static int gossip_enqueue_to_outbound(pittacus_gossip_t *self,
                                       const uint8_t *buffer,
                                       size_t buffer_size,
                                       uint16_t max_attempts,
-                                      const pt_sockaddr_storage *recipient,
-                                      pt_socklen_t recipient_len) {
-    const pt_sockaddr_storage *receivers[MESSAGE_RUMOR_FACTOR];
-    pt_socklen_t receiver_lengths[MESSAGE_RUMOR_FACTOR];
-    int receivers_num = 0;
-    if (recipient != NULL && recipient_len != 0) {
-        receivers_num = 1;
-        receivers[0] = recipient;
-        receiver_lengths[0] = recipient_len;
-    } else {
-        // The recipient was not provided. That means we should spread
-        // the given message to random nodes.
-        cluster_member_t *reservoir[MESSAGE_RUMOR_FACTOR];
-        receivers_num = cluster_member_map_random_member(&self->members, reservoir, MESSAGE_RUMOR_FACTOR);
-        for (int i = 0; i < receivers_num; ++i) {
-            receivers[i] = reservoir[i]->address;
-            receiver_lengths[i] = reservoir[i]->address_len;
-        }
-    }
-
-    for (int i = 0; i < receivers_num; ++i) {
-        // Create a new envelope for each recipient.
-        // Note: all created envelopes share the same buffer.
-        uint32_t seq_num = ++self->sequence_num;
-        message_envelope_out_t *new_envelope = gossip_envelope_create(seq_num,
-                                                                      buffer, buffer_size,
-                                                                      max_attempts,
-                                                                      receivers[i], receiver_lengths[i]);
-        if (new_envelope == NULL) return PITTACUS_ERR_ALLOCATION_FAILED;
-        gossip_envelope_enqueue(&self->outbound_messages, new_envelope);
-    }
+                                      const pt_sockaddr_storage *receiver,
+                                      pt_socklen_t receiver_size) {
+    uint32_t seq_num = ++self->sequence_num;
+    message_envelope_out_t *new_envelope = gossip_envelope_create(seq_num,
+                                                                  buffer, buffer_size,
+                                                                  max_attempts,
+                                                                  receiver, receiver_size);
+    if (new_envelope == NULL) return PITTACUS_ERR_ALLOCATION_FAILED;
+    gossip_envelope_enqueue(&self->outbound_messages, new_envelope);
     return PITTACUS_ERR_NONE;
 }
+
+typedef enum gossip_spreading_type {
+    GOSSIP_DIRECT = 0,
+    GOSSIP_RANDOM = 1,
+    GOSSIP_BROADCAST = 2
+} gossip_spreading_type_t;
 
 static int gossip_enqueue_message(pittacus_gossip_t *self,
                                   uint8_t msg_type,
                                   const void *msg,
                                   const pt_sockaddr_storage *recipient,
-                                  pt_socklen_t recipient_len) {
+                                  pt_socklen_t recipient_len,
+                                  gossip_spreading_type_t spreading_type) {
     uint32_t offset = gossip_update_output_buffer_offset(self);
     uint8_t *buffer = self->output_buffer + offset;
     int encode_result = 0;
     uint16_t max_attempts = MESSAGE_RETRY_ATTEMPTS;
 
+    // Serialize the message.
     switch(msg_type) {
         case MESSAGE_HELLO_TYPE:
             encode_result = message_hello_encode((const message_hello_t *) msg,
@@ -271,9 +257,46 @@ static int gossip_enqueue_message(pittacus_gossip_t *self,
         default:
             return PITTACUS_ERR_INVALID_MESSAGE;
     }
-
     if (encode_result < 0) return encode_result;
-    return gossip_enqueue_to_outbound(self, buffer, encode_result, max_attempts, recipient, recipient_len);
+
+    int result = PITTACUS_ERR_NONE;
+
+    // Distribute the message.
+    switch (spreading_type) {
+        case GOSSIP_DIRECT:
+            // Send message to a single recipient.
+            return gossip_enqueue_to_outbound(self, buffer, encode_result, max_attempts,
+                                              recipient, recipient_len);
+        case GOSSIP_RANDOM: {
+            // Choose some number of random members to distribute the message.
+            cluster_member_t *reservoir[MESSAGE_RUMOR_FACTOR];
+            int receivers_num = cluster_member_map_random_member(&self->members,
+                                                                 reservoir, MESSAGE_RUMOR_FACTOR);
+            for (int i = 0; i < receivers_num; ++i) {
+                // Create a new envelope for each recipient.
+                // Note: all created envelopes share the same buffer.
+                result = gossip_enqueue_to_outbound(self, buffer, encode_result, max_attempts,
+                                                    reservoir[i]->address, reservoir[i]->address_len);
+                if (result < 0) return result;
+            }
+            break;
+        }
+        case GOSSIP_BROADCAST: {
+            // Distribute the message to all known members.
+            for (int i = 0; i < self->members.capacity; ++i) {
+                // Create a new envelope for each recipient.
+                // Note: all created envelopes share the same buffer.
+                if (self->members.map[i] != NULL) {
+                    cluster_member_t *member = self->members.map[i];
+                    result = gossip_enqueue_to_outbound(self, buffer, encode_result, max_attempts,
+                                                        member->address, member->address_len);
+                    if (result < 0) return result;
+                }
+            }
+            break;
+        }
+    }
+    return result;
 }
 
 static int gossip_enqueue_ack(pittacus_gossip_t *self,
@@ -284,7 +307,7 @@ static int gossip_enqueue_ack(pittacus_gossip_t *self,
     message_header_init(&ack_msg.header, MESSAGE_ACK_TYPE, 0);
     ack_msg.ack_sequence_num = sequence_num;
     return gossip_enqueue_message(self, MESSAGE_ACK_TYPE, &ack_msg,
-                                  recipient, recipient_len);
+                                  recipient, recipient_len, GOSSIP_DIRECT);
 }
 
 static int gossip_enqueue_welcome(pittacus_gossip_t *self,
@@ -296,7 +319,7 @@ static int gossip_enqueue_welcome(pittacus_gossip_t *self,
     welcome_msg.hello_sequence_num = hello_sequence_num;
     welcome_msg.this_member = &self->self_address;
     return gossip_enqueue_message(self, MESSAGE_WELCOME_TYPE, &welcome_msg,
-                                  recipient, recipient_len);
+                                  recipient, recipient_len, GOSSIP_DIRECT);
 }
 
 static int gossip_enqueue_hello(pittacus_gossip_t *self,
@@ -306,14 +329,12 @@ static int gossip_enqueue_hello(pittacus_gossip_t *self,
     message_header_init(&hello_msg.header, MESSAGE_HELLO_TYPE, 0);
     hello_msg.this_member = &self->self_address;
     return gossip_enqueue_message(self, MESSAGE_HELLO_TYPE, &hello_msg,
-                                  recipient, recipient_len);
+                                  recipient, recipient_len, GOSSIP_DIRECT);
 }
 
 static int gossip_enqueue_data(pittacus_gossip_t *self,
                                const uint8_t *data,
-                               uint16_t data_size,
-                               const pt_sockaddr_storage *recipient,
-                               pt_socklen_t recipient_len) {
+                               uint16_t data_size) {
     // Update the local data version.
     uint32_t clock_counter = ++self->data_counter;
     vector_record_t *record = vector_clock_set(&self->data_version, &self->self_address,
@@ -325,7 +346,7 @@ static int gossip_enqueue_data(pittacus_gossip_t *self,
     data_msg.data = (uint8_t *) data;
     data_msg.data_size = data_size;
     return gossip_enqueue_message(self, MESSAGE_DATA_TYPE, &data_msg,
-                                  recipient, recipient_len);
+                                  NULL, 0, GOSSIP_RANDOM);
 }
 
 static int gossip_enqueue_member_list(pittacus_gossip_t *self,
@@ -340,20 +361,31 @@ static int gossip_enqueue_member_list(pittacus_gossip_t *self,
     // TODO: get rid of the redundant copying.
     cluster_member_t *members_to_send = (cluster_member_t *) malloc(members_num * sizeof(cluster_member_t));
     if (members_to_send == NULL) return PITTACUS_ERR_ALLOCATION_FAILED;
+
+    int result = PITTACUS_ERR_NONE;
     int to_send_idx = 0;
     int member_idx = 0;
-    while (to_send_idx < members_num) {
-        if (members->map[member_idx] != NULL) {
-            memcpy(&members_to_send[to_send_idx], members->map[member_idx], sizeof(cluster_member_t));
-            ++to_send_idx;
+    while (member_idx < members->capacity) {
+        // Send the list of all known members to a recipient.
+        // The list can be pretty big, so we split it into multiple messages.
+        while (to_send_idx < members_num && member_idx < members->capacity) {
+            if (members->map[member_idx] != NULL) {
+                memcpy(&members_to_send[to_send_idx], members->map[member_idx], sizeof(cluster_member_t));
+                ++to_send_idx;
+            }
+            ++member_idx;
         }
-        ++member_idx;
-    }
 
-    member_list_msg.members_n = members_num;
-    member_list_msg.members = members_to_send;
-    int result = gossip_enqueue_message(self, MESSAGE_MEMBER_LIST_TYPE, &member_list_msg,
-                                        recipient, recipient_len);
+        member_list_msg.members_n = to_send_idx;
+        member_list_msg.members = members_to_send;
+        result = gossip_enqueue_message(self, MESSAGE_MEMBER_LIST_TYPE, &member_list_msg,
+                                        recipient, recipient_len, GOSSIP_DIRECT);
+        if (result < 0) {
+            free(members_to_send);
+            return result;
+        }
+        to_send_idx = 0;
+    }
     free(members_to_send);
     return result;
 }
@@ -369,10 +401,17 @@ static int gossip_handle_hello(pittacus_gossip_t *self, const message_envelope_i
     // Send back a Welcome message.
     gossip_enqueue_welcome(self, msg.header.sequence_num, envelope_in->sender, envelope_in->sender_len);
 
-    // Send some portion of known members to a newcomer node.
+    // Send the list of known members to a newcomer node.
     if (self->members.size > 0) {
         gossip_enqueue_member_list(self, envelope_in->sender, envelope_in->sender_len);
     }
+
+    // Notify other nodes about a newcomer.
+    message_member_list_t member_list_msg;
+    message_header_init(&member_list_msg.header, MESSAGE_MEMBER_LIST_TYPE, 0);
+    member_list_msg.members = msg.this_member;
+    member_list_msg.members_n = 1;
+    gossip_enqueue_message(self, MESSAGE_MEMBER_LIST_TYPE, &member_list_msg, NULL, 0, GOSSIP_BROADCAST);
 
     // Update our local storage with a new member.
     cluster_member_map_put(&self->members, msg.this_member, 1);
@@ -431,7 +470,7 @@ static int gossip_handle_data(pittacus_gossip_t *self, const message_envelope_in
         return decode_result;
     }
 
-    // Send ACK message back to qsender.
+    // Send ACK message back to sender.
     gossip_enqueue_ack(self, msg.header.sequence_num, envelope_in->sender, envelope_in->sender_len);
 
     // Verify whether we saw the arrived message before.
@@ -442,7 +481,7 @@ static int gossip_handle_data(pittacus_gossip_t *self, const message_envelope_in
         // Invoke the data receiver callback specified by the user.
         self->data_receiver(self->data_receiver_context, self, msg.data, msg.data_size);
         // Enqueue the same message to send it to N random members later.
-        return gossip_enqueue_message(self, MESSAGE_DATA_TYPE, &msg, NULL, 0);
+        return gossip_enqueue_message(self, MESSAGE_DATA_TYPE, &msg, NULL, 0, GOSSIP_RANDOM);
     }
     return PITTACUS_ERR_NONE;
 }
@@ -594,8 +633,8 @@ int pittacus_gossip_process_send(pittacus_gossip_t *self) {
             continue;
         }
 
-        // Update the sequence number in the buffer in order to correspond
-        // the sequence number stored in envelope. This approach violates
+        // Update the sequence number in the buffer in order to correspond to
+        // a sequence number stored in envelope. This approach violates
         // the protocol interface but prevents copying of the whole
         // buffer each time when a single message has multiple recipients.
         uint32_t seq_num_n = PT_HTONL(current->sequence_num);
@@ -616,6 +655,12 @@ int pittacus_gossip_process_send(pittacus_gossip_t *self) {
             // The message exceeded the maximum number of attempts.
             // Remove this message from the queue.
             gossip_envelope_remove(&self->outbound_messages, current);
+            // If the number of maximum attempts is more than 1, than
+            // the message required acknowledgement but we didn't receive it.
+            // Remove node from the list since it's unreachable.
+            if (current->max_attempts > 1) {
+                // TODO: remove member.
+            }
         }
         ++msg_sent;
     }
@@ -624,7 +669,7 @@ int pittacus_gossip_process_send(pittacus_gossip_t *self) {
 
 int pittacus_gossip_send_data(pittacus_gossip_t *self, const uint8_t *data, uint32_t data_size) {
     RETURN_IF_NOT_CONNECTED(self->state);
-    return gossip_enqueue_data(self, data, data_size, NULL, 0);
+    return gossip_enqueue_data(self, data, data_size);
 }
 
 pittacus_gossip_state_t pittacus_gossip_state(pittacus_gossip_t *self) {

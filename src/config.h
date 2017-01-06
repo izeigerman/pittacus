@@ -51,7 +51,7 @@ extern "C" {
 
 #ifndef MAX_OUTPUT_MESSAGES
 /** The maximum number of unique messages that can be stored in the outbound message queue. */
-#define MAX_OUTPUT_MESSAGES 25
+#define MAX_OUTPUT_MESSAGES 100
 #endif
 
 #ifdef  __cplusplus
