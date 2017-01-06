@@ -274,8 +274,8 @@ static int gossip_enqueue_message(pittacus_gossip_t *self,
         case GOSSIP_RANDOM: {
             // Choose some number of random members to distribute the message.
             cluster_member_t *reservoir[MESSAGE_RUMOR_FACTOR];
-            int receivers_num = cluster_member_set_random_member(&self->members,
-                                                                 reservoir, MESSAGE_RUMOR_FACTOR);
+            int receivers_num = cluster_member_set_random_members(&self->members,
+                                                                  reservoir, MESSAGE_RUMOR_FACTOR);
             for (int i = 0; i < receivers_num; ++i) {
                 // Create a new envelope for each recipient.
                 // Note: all created envelopes share the same buffer.
@@ -658,7 +658,7 @@ int pittacus_gossip_process_send(pittacus_gossip_t *self) {
             // The message exceeded the maximum number of attempts.
 
             // If the number of maximum attempts is more than 1, then
-            // the message required acknowledgement but we didn't receive it.
+            // the message required acknowledgement but we never received it.
             // Remove node from the list since it's unreachable.
             if (current->max_attempts > 1) {
                 cluster_member_set_remove_by_addr(&self->members,

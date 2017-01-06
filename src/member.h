@@ -55,8 +55,8 @@ cluster_member_t *cluster_member_set_find_by_addr(cluster_member_set_t *members,
 int cluster_member_set_remove_by_addr(cluster_member_set_t *members,
                                       const pt_sockaddr_storage *addr,
                                       pt_socklen_t addr_size);
-size_t cluster_member_set_random_member(cluster_member_set_t *members,
-                                        cluster_member_t **reservoir, size_t reservoir_size);
+size_t cluster_member_set_random_members(cluster_member_set_t *members,
+                                         cluster_member_t **reservoir, size_t reservoir_size);
 void cluster_member_set_item_destroy(cluster_member_t *member);
 void cluster_member_set_destroy(cluster_member_set_t *members);
 

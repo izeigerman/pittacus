@@ -197,8 +197,8 @@ int cluster_member_set_remove_by_addr(cluster_member_set_t *members,
     return PT_FALSE;
 }
 
-size_t cluster_member_set_random_member(cluster_member_set_t *members,
-                                        cluster_member_t **reservoir, size_t reservoir_size) {
+size_t cluster_member_set_random_members(cluster_member_set_t *members,
+                                         cluster_member_t **reservoir, size_t reservoir_size) {
     // Randomly choosing the specified number of elements using the
     // reservoir sampling algorithm.
     if (members->size == 0) return 0;
