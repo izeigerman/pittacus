@@ -29,6 +29,13 @@ void data_receiver(void *context, pittacus_gossip_t *gossip, const uint8_t *data
 }
 
 int main(int argc, char **argv) {
+    char *node_id = "0";
+    if (argc > 1) {
+        node_id = argv[1];
+    }
+    char message[256];
+    size_t message_size = sprintf(message, "[%s]: %s", node_id, DATA_MESSAGE) + 1;
+
     struct sockaddr_in self_in;
     self_in.sin_family = AF_INET;
     self_in.sin_port = 0; // pick up a random port.
@@ -113,7 +120,7 @@ int main(int argc, char **argv) {
         time_t current_time = time(NULL);
         if (previous_data_msg_ts + send_data_interval <= current_time) {
             previous_data_msg_ts = current_time;
-            pittacus_gossip_send_data(gossip, (const uint8_t *) DATA_MESSAGE, sizeof(DATA_MESSAGE));
+            pittacus_gossip_send_data(gossip, (const uint8_t *) message, message_size);
         }
         // Tell Pittacus to write existing messages to the socket.
         send_result = pittacus_gossip_process_send(gossip);
