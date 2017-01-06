@@ -23,6 +23,8 @@
 extern "C" {
 #endif
 
+#define CLUSTER_MEMBER_SIZE (sizeof(uint16_t) + sizeof(uint32_t) + sizeof(pt_socklen_t) + sizeof(pt_sockaddr_storage))
+
 typedef struct cluster_member {
     uint16_t version;
     uint32_t uid;

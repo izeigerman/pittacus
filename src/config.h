@@ -34,11 +34,6 @@ extern "C" {
 #define MESSAGE_RETRY_ATTEMPTS 3
 #endif
 
-#ifndef MEMBER_LIST_SYNC_SIZE
-/** The maximum size of the member list that is shared with a newcomer node. */
-#define MEMBER_LIST_SYNC_SIZE 10
-#endif
-
 #ifndef MESSAGE_RUMOR_FACTOR
 /** The number of members that are used for further gossip propagation. */
 #define MESSAGE_RUMOR_FACTOR 3

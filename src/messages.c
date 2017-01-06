@@ -232,7 +232,7 @@ int message_member_list_decode(const uint8_t *buffer, size_t buffer_size, messag
 
 int message_member_list_encode(const message_member_list_t *msg, uint8_t *buffer, size_t buffer_size) {
     uint32_t expected_size = sizeof(message_header_t) + sizeof(uint16_t);
-    expected_size += msg->members_n * (sizeof(uint16_t) + sizeof(uint32_t) + sizeof(pt_sockaddr_storage));
+    expected_size += msg->members_n * CLUSTER_MEMBER_SIZE;
     if (buffer_size < expected_size) return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
 
     int encode_result = message_header_encode(&msg->header, buffer, buffer_size);

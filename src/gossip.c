@@ -349,6 +349,8 @@ static int gossip_enqueue_data(pittacus_gossip_t *self,
                                   NULL, 0, GOSSIP_RANDOM);
 }
 
+#define MEMBER_LIST_SYNC_SIZE (MESSAGE_MAX_SIZE / CLUSTER_MEMBER_SIZE)
+
 static int gossip_enqueue_member_list(pittacus_gossip_t *self,
                                       const pt_sockaddr_storage *recipient,
                                       pt_socklen_t recipient_len) {
@@ -357,6 +359,7 @@ static int gossip_enqueue_member_list(pittacus_gossip_t *self,
 
     const cluster_member_map_t *members = &self->members;
     uint32_t members_num = (members->size > MEMBER_LIST_SYNC_SIZE) ? MEMBER_LIST_SYNC_SIZE : members->size;
+    if (members_num == 0) return PITTACUS_ERR_NONE;
 
     // TODO: get rid of the redundant copying.
     cluster_member_t *members_to_send = (cluster_member_t *) malloc(members_num * sizeof(cluster_member_t));
@@ -375,14 +378,15 @@ static int gossip_enqueue_member_list(pittacus_gossip_t *self,
             }
             ++member_idx;
         }
-
-        member_list_msg.members_n = to_send_idx;
-        member_list_msg.members = members_to_send;
-        result = gossip_enqueue_message(self, MESSAGE_MEMBER_LIST_TYPE, &member_list_msg,
-                                        recipient, recipient_len, GOSSIP_DIRECT);
-        if (result < 0) {
-            free(members_to_send);
-            return result;
+        if (to_send_idx > 0) {
+            member_list_msg.members_n = to_send_idx;
+            member_list_msg.members = members_to_send;
+            result = gossip_enqueue_message(self, MESSAGE_MEMBER_LIST_TYPE, &member_list_msg,
+                                            recipient, recipient_len, GOSSIP_DIRECT);
+            if (result < 0) {
+                free(members_to_send);
+                return result;
+            }
         }
         to_send_idx = 0;
     }
@@ -652,6 +656,8 @@ int pittacus_gossip_process_send(pittacus_gossip_t *self) {
 
         current->attempt_ts = current_ts;
         if (++current->attempt_num >= current->max_attempts) {
+            // The message exceeded the maximum number of attempts.
+
             // If the number of maximum attempts is more than 1, than
             // the message required acknowledgement but we didn't receive it.
             // Remove node from the list since it's unreachable.
@@ -663,7 +669,6 @@ int pittacus_gossip_process_send(pittacus_gossip_t *self) {
                     cluster_member_map_remove(&self->members, unreachable);
                 }
             }
-            // The message exceeded the maximum number of attempts.
             // Remove this message from the queue.
             gossip_envelope_remove(&self->outbound_messages, current);
         }
