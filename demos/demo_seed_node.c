@@ -97,7 +97,7 @@ int main(int argc, char **argv) {
         // Tell Pittacus to write existing messages to the socket.
         send_result = pittacus_gossip_process_send(gossip);
         if (send_result < 0) {
-            fprintf(stderr, "Gossip send failed: %d\n", recv_result);
+            fprintf(stderr, "Gossip send failed: %d\n", send_result);
             pittacus_gossip_destroy(gossip);
             return -1;
         }

@@ -215,17 +215,9 @@ typedef enum gossip_spreading_type {
     GOSSIP_BROADCAST = 2
 } gossip_spreading_type_t;
 
-static int gossip_enqueue_message(pittacus_gossip_t *self,
-                                  uint8_t msg_type,
-                                  const void *msg,
-                                  const pt_sockaddr_storage *recipient,
-                                  pt_socklen_t recipient_len,
-                                  gossip_spreading_type_t spreading_type) {
-    uint32_t offset = gossip_update_output_buffer_offset(self);
-    uint8_t *buffer = self->output_buffer + offset;
+static int gossip_encode_message(uint8_t msg_type, const void *msg, uint8_t *buffer, uint16_t *max_attempts) {
+    *max_attempts = MESSAGE_RETRY_ATTEMPTS;
     int encode_result = 0;
-    uint16_t max_attempts = MESSAGE_RETRY_ATTEMPTS;
-
     // Serialize the message.
     switch(msg_type) {
         case MESSAGE_HELLO_TYPE:
@@ -237,7 +229,7 @@ static int gossip_enqueue_message(pittacus_gossip_t *self,
                                                    buffer, MESSAGE_MAX_SIZE);
             // Welcome message can't be acknowledged. It should be removed from the
             // outbound queue after the first attempt.
-            max_attempts = 1;
+            *max_attempts = 1;
             break;
         case MESSAGE_MEMBER_LIST_TYPE:
             encode_result = message_member_list_encode((const message_member_list_t *) msg,
@@ -252,15 +244,27 @@ static int gossip_enqueue_message(pittacus_gossip_t *self,
                                                buffer, MESSAGE_MAX_SIZE);
             // ACK message can't be acknowledged. It should be removed from the
             // outbound queue after the first attempt.
-            max_attempts = 1;
+            *max_attempts = 1;
             break;
         default:
             return PITTACUS_ERR_INVALID_MESSAGE;
     }
+    return encode_result;
+}
+
+static int gossip_enqueue_message(pittacus_gossip_t *self,
+                                  uint8_t msg_type,
+                                  const void *msg,
+                                  const pt_sockaddr_storage *recipient,
+                                  pt_socklen_t recipient_len,
+                                  gossip_spreading_type_t spreading_type) {
+    uint32_t offset = gossip_update_output_buffer_offset(self);
+    uint8_t *buffer = self->output_buffer + offset;
+    uint16_t max_attempts = 0;
+    int encode_result = gossip_encode_message(msg_type, msg, buffer, &max_attempts);
     if (encode_result < 0) return encode_result;
 
     int result = PITTACUS_ERR_NONE;
-
     // Distribute the message.
     switch (spreading_type) {
         case GOSSIP_DIRECT:
@@ -283,15 +287,13 @@ static int gossip_enqueue_message(pittacus_gossip_t *self,
         }
         case GOSSIP_BROADCAST: {
             // Distribute the message to all known members.
-            for (int i = 0; i < self->members.capacity; ++i) {
+            for (int i = 0; i < self->members.size; ++i) {
                 // Create a new envelope for each recipient.
                 // Note: all created envelopes share the same buffer.
-                if (self->members.map[i] != NULL) {
-                    cluster_member_t *member = self->members.map[i];
-                    result = gossip_enqueue_to_outbound(self, buffer, encode_result, max_attempts,
-                                                        member->address, member->address_len);
-                    if (result < 0) return result;
-                }
+                cluster_member_t *member = self->members.map[i];
+                result = gossip_enqueue_to_outbound(self, buffer, encode_result, max_attempts,
+                                                    member->address, member->address_len);
+                if (result < 0) return result;
             }
             break;
         }
@@ -368,14 +370,12 @@ static int gossip_enqueue_member_list(pittacus_gossip_t *self,
     int result = PITTACUS_ERR_NONE;
     int to_send_idx = 0;
     int member_idx = 0;
-    while (member_idx < members->capacity) {
+    while (member_idx < members->size) {
         // Send the list of all known members to a recipient.
         // The list can be pretty big, so we split it into multiple messages.
-        while (to_send_idx < members_num && member_idx < members->capacity) {
-            if (members->map[member_idx] != NULL) {
-                memcpy(&members_to_send[to_send_idx], members->map[member_idx], sizeof(cluster_member_t));
-                ++to_send_idx;
-            }
+        while (to_send_idx < members_num && member_idx < members->size) {
+            memcpy(&members_to_send[to_send_idx], members->map[member_idx], sizeof(cluster_member_t));
+            ++to_send_idx;
             ++member_idx;
         }
         if (to_send_idx > 0) {
@@ -612,7 +612,7 @@ int pittacus_gossip_process_receive(pittacus_gossip_t *self) {
     pt_socklen_t addr_len = sizeof(pt_sockaddr_storage);
     // Read a new message.
     int read_result = pt_recv_from(self->socket, self->input_buffer, INPUT_BUFFER_SIZE, &addr, &addr_len);
-    if (read_result <= 0) return read_result;
+    if (read_result <= 0) return PITTACUS_ERR_READ_FAILED;
 
     message_envelope_in_t envelope;
     envelope.buffer = self->input_buffer;
@@ -650,8 +650,7 @@ int pittacus_gossip_process_send(pittacus_gossip_t *self) {
                                       &current->recipient, current->recipient_len);
 
         if (write_result < 0) {
-            // FIXME: better error handling?
-            return write_result;
+            return PITTACUS_ERR_WRITE_FAILED;
         }
 
         current->attempt_ts = current_ts;

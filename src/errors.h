@@ -28,6 +28,8 @@ typedef enum pittacus_error {
     PITTACUS_ERR_INVALID_MESSAGE = -4,
     PITTACUS_ERR_BUFFER_NOT_ENOUGH = -5,
     PITTACUS_ERR_NOT_FOUND = -6,
+    PITTACUS_ERR_WRITE_FAILED = -7,
+    PITTACUS_ERR_READ_FAILED = -8
 } pittacus_error_t;
 
 #ifdef  __cplusplus

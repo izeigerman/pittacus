@@ -85,23 +85,6 @@ int cluster_member_encode(const cluster_member_t *member, uint8_t *buffer, size_
     return cursor - buffer;
 }
 
-
-static uint32_t cluster_member_map_idx(uint32_t capacity, const pt_sockaddr_storage *addr) {
-    // TODO: should we use hash function instead?
-    uint64_t result = 0;
-    uint8_t *result_buf = (uint8_t *) &result;
-    if (addr->ss_family == AF_INET) {
-        pt_sockaddr_in *addr_in = (pt_sockaddr_in *) addr;
-        memcpy(result_buf + 2, &addr_in->sin_addr, 4);
-        memcpy(result_buf + 6, &addr_in->sin_port, 2);
-    } else {
-        pt_sockaddr_in6 *addr_in6 = (pt_sockaddr_in6 *) addr;
-        memcpy(result_buf, &addr_in6->sin6_addr, 6);
-        memcpy(result_buf + 6, &addr_in6->sin6_port, 2);
-    }
-    return result % capacity;
-}
-
 static cluster_member_map_t *cluster_member_map_extend(cluster_member_map_t *members, uint32_t required_size) {
     uint32_t new_capacity = members->capacity;
     while (required_size >= new_capacity * MEMBERS_LOAD_FACTOR) new_capacity *= MEMBERS_EXTENSION_FACTOR;
@@ -109,10 +92,9 @@ static cluster_member_map_t *cluster_member_map_extend(cluster_member_map_t *mem
     cluster_member_t **new_member_map = (cluster_member_t **) calloc(new_capacity, sizeof(cluster_member_t *));
     if (new_member_map == NULL) return NULL;
 
-    for (int i = 0; i < members->capacity; ++i) {
+    for (int i = 0; i < members->size; ++i) {
         if (members->map[i] != NULL) {
-            uint32_t new_idx = cluster_member_map_idx(new_capacity, members->map[i]->address);
-            new_member_map[new_idx] = members->map[i];
+            new_member_map[i] = members->map[i];
         }
     }
     free(members->map);
@@ -141,22 +123,22 @@ int cluster_member_map_put(cluster_member_map_t *members, cluster_member_t *new_
     }
 
     for (cluster_member_t *current = new_members; current < new_members + new_members_size; ++current) {
-        cluster_member_t *new_member = (cluster_member_t *) malloc(sizeof(cluster_member_t));
-        if (new_member == NULL) return PITTACUS_ERR_ALLOCATION_FAILED;
-
-        cluster_member_copy(new_member, current);
-        uint32_t idx = cluster_member_map_idx(members->capacity, new_member->address);
-        while (members->map[idx] != NULL && !cluster_member_equals(members->map[idx], new_member)) {
-            ++idx;
-            if (idx >= members->capacity) idx = 0;
+        pt_bool_t exists = PT_FALSE;
+        for (int i = 0; i < members->size; ++i) {
+            if (cluster_member_equals(members->map[i], current)) {
+                exists = PT_TRUE;
+                break;
+            }
         }
-        if (members->map[idx] != NULL) {
-            // override the existing item.
-            cluster_member_map_item_destroy(members->map[idx]);
-        } else {
+        if (!exists) {
+            // New member.
+            cluster_member_t *new_member = (cluster_member_t *) malloc(sizeof(cluster_member_t));
+            if (new_member == NULL) return PITTACUS_ERR_ALLOCATION_FAILED;
+
+            cluster_member_copy(new_member, current);
+            members->map[members->size] = new_member;
             ++members->size;
         }
-        members->map[idx] = new_member;
     }
     return PITTACUS_ERR_NONE;
 }
@@ -169,41 +151,36 @@ void cluster_member_map_item_destroy(cluster_member_t *member) {
 }
 
 void cluster_member_map_destroy(cluster_member_map_t *members) {
-    for (int i = 0; i < members->capacity; ++i) {
-        if (members->map[i] != NULL) {
-            cluster_member_map_item_destroy(members->map[i]);
-        }
+    for (int i = 0; i < members->size; ++i) {
+        cluster_member_map_item_destroy(members->map[i]);
     }
     free(members->map);
 }
 
 int cluster_member_map_remove(cluster_member_map_t *members, cluster_member_t *member) {
     if (members->size == 0) return 0;
-    uint32_t seen = 0;
-    uint32_t idx = cluster_member_map_idx(members->capacity, member->address);
-    while (seen < members->capacity && members->map[idx] != NULL) {
+    uint32_t idx = 0;
+    while (idx < members->size) {
         if (members->map[idx] == member) {
             cluster_member_map_item_destroy(member);
-            members->map[idx] = NULL;
+            // Shift the list.
+            for (int i = idx; i < members->size - 1; ++i) {
+                members->map[i] = members->map[i + 1];
+            }
             --members->size;
-            return 1;
+            return PT_TRUE;
         }
-        if (++idx >= members->capacity) idx = 0;
-        ++seen;
+        ++idx;
     }
-    return 0;
+    return PT_FALSE;
 }
 
 cluster_member_t *cluster_member_map_find_by_addr(cluster_member_map_t *members,
                                                   const pt_sockaddr_storage *addr,
                                                   pt_socklen_t addr_size) {
     if (members->size == 0) return NULL;
-    uint32_t seen = 0;
-    uint32_t idx = cluster_member_map_idx(members->capacity, addr);
-    while (seen < members->capacity && members->map[idx] != NULL) {
-        if (memcmp(members->map[idx]->address, addr, addr_size) == 0) return members->map[idx];
-        if (++idx >= members->capacity) idx = 0;
-        ++seen;
+    for (int i = 0; i < members->size; ++i) {
+        if (memcmp(members->map[i]->address, addr, addr_size) == 0) return members->map[i];
     }
     return NULL;
 }
@@ -217,27 +194,20 @@ size_t cluster_member_map_random_member(cluster_member_map_t *members,
 
     size_t reservoir_idx = 0;
     size_t member_idx = 0;
-    size_t members_seen = 0;
 
     // Fill in the reservoir with first map elements.
     while (reservoir_idx < actual_reservoir_size) {
-        if (members->map[member_idx] != NULL) {
-            ++members_seen;
-            reservoir[reservoir_idx] = members->map[member_idx];
-            ++reservoir_idx;
-        }
+        reservoir[reservoir_idx] = members->map[member_idx];
         ++member_idx;
+        ++reservoir_idx;
     }
 
     // Randomly replace reservoir's elements with items from the member's map.
     if (actual_reservoir_size < members->size) {
-        for (; member_idx < members->capacity; ++member_idx) {
-            if (members->map[member_idx] != NULL) {
-                ++members_seen;
-                uint32_t random_idx = pt_random() % (members_seen + 1);
-                if (random_idx < actual_reservoir_size) {
-                    reservoir[random_idx] = members->map[member_idx];
-                }
+        for (; member_idx < members->size; ++member_idx) {
+            size_t random_idx = pt_random() % (member_idx + 1);
+            if (random_idx < actual_reservoir_size) {
+                reservoir[random_idx] = members->map[member_idx];
             }
         }
     }
