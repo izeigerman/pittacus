@@ -70,7 +70,7 @@ struct pittacus_gossip {
 
     pittacus_gossip_state_t state;
     cluster_member_t self_address;
-    cluster_member_map_t members;
+    cluster_member_set_t members;
 
     data_receiver_t data_receiver;
     void *data_receiver_context;
@@ -274,7 +274,7 @@ static int gossip_enqueue_message(pittacus_gossip_t *self,
         case GOSSIP_RANDOM: {
             // Choose some number of random members to distribute the message.
             cluster_member_t *reservoir[MESSAGE_RUMOR_FACTOR];
-            int receivers_num = cluster_member_map_random_member(&self->members,
+            int receivers_num = cluster_member_set_random_member(&self->members,
                                                                  reservoir, MESSAGE_RUMOR_FACTOR);
             for (int i = 0; i < receivers_num; ++i) {
                 // Create a new envelope for each recipient.
@@ -290,7 +290,7 @@ static int gossip_enqueue_message(pittacus_gossip_t *self,
             for (int i = 0; i < self->members.size; ++i) {
                 // Create a new envelope for each recipient.
                 // Note: all created envelopes share the same buffer.
-                cluster_member_t *member = self->members.map[i];
+                cluster_member_t *member = self->members.set[i];
                 result = gossip_enqueue_to_outbound(self, buffer, encode_result, max_attempts,
                                                     member->address, member->address_len);
                 if (result < 0) return result;
@@ -359,7 +359,7 @@ static int gossip_enqueue_member_list(pittacus_gossip_t *self,
     message_member_list_t member_list_msg;
     message_header_init(&member_list_msg.header, MESSAGE_MEMBER_LIST_TYPE, 0);
 
-    const cluster_member_map_t *members = &self->members;
+    const cluster_member_set_t *members = &self->members;
     uint32_t members_num = (members->size > MEMBER_LIST_SYNC_SIZE) ? MEMBER_LIST_SYNC_SIZE : members->size;
     if (members_num == 0) return PITTACUS_ERR_NONE;
 
@@ -374,7 +374,7 @@ static int gossip_enqueue_member_list(pittacus_gossip_t *self,
         // Send the list of all known members to a recipient.
         // The list can be pretty big, so we split it into multiple messages.
         while (to_send_idx < members_num && member_idx < members->size) {
-            memcpy(&members_to_send[to_send_idx], members->map[member_idx], sizeof(cluster_member_t));
+            memcpy(&members_to_send[to_send_idx], members->set[member_idx], sizeof(cluster_member_t));
             ++to_send_idx;
             ++member_idx;
         }
@@ -418,7 +418,7 @@ static int gossip_handle_hello(pittacus_gossip_t *self, const message_envelope_i
     gossip_enqueue_message(self, MESSAGE_MEMBER_LIST_TYPE, &member_list_msg, NULL, 0, GOSSIP_BROADCAST);
 
     // Update our local storage with a new member.
-    cluster_member_map_put(&self->members, msg.this_member, 1);
+    cluster_member_set_put(&self->members, msg.this_member, 1);
 
     // FIXME: send the existing data messages
 
@@ -436,7 +436,7 @@ static int gossip_handle_welcome(pittacus_gossip_t *self, const message_envelope
 
     // Now when the seed node responded we can
     // safely add it to the list of known members.
-    cluster_member_map_put(&self->members, msg.this_member, 1);
+    cluster_member_set_put(&self->members, msg.this_member, 1);
 
     // Remove the hello message from the outbound queue.
     message_envelope_out_t *hello_envelope =
@@ -457,7 +457,7 @@ static int gossip_handle_member_list(pittacus_gossip_t *self, const message_enve
     };
 
     // Update our local collection of members with arrived records.
-    cluster_member_map_put(&self->members, msg.members, msg.members_n);
+    cluster_member_set_put(&self->members, msg.members, msg.members_n);
 
     // Send ACK message back to sender.
     gossip_enqueue_ack(self, msg.header.sequence_num, envelope_in->sender, envelope_in->sender_len);
@@ -556,7 +556,7 @@ static int pittacus_gossip_init(pittacus_gossip_t *self,
 
     self->state = STATE_INITIALIZED;
     cluster_member_init(&self->self_address, &updated_self_addr, updated_self_addr_size);
-    cluster_member_map_init(&self->members);
+    cluster_member_set_init(&self->members);
 
     self->data_receiver = data_receiver;
     self->data_receiver_context = data_receiver_context;
@@ -583,7 +583,7 @@ int pittacus_gossip_destroy(pittacus_gossip_t *self) {
 
     self->state = STATE_DESTROYED;
     cluster_member_destroy(&self->self_address);
-    cluster_member_map_destroy(&self->members);
+    cluster_member_set_destroy(&self->members);
 
     free(self);
     return PITTACUS_ERR_NONE;
@@ -661,11 +661,11 @@ int pittacus_gossip_process_send(pittacus_gossip_t *self) {
             // the message required acknowledgement but we didn't receive it.
             // Remove node from the list since it's unreachable.
             if (current->max_attempts > 1) {
-                cluster_member_t *unreachable = cluster_member_map_find_by_addr(&self->members,
+                cluster_member_t *unreachable = cluster_member_set_find_by_addr(&self->members,
                                                                                 &current->recipient,
                                                                                 current->recipient_len);
                 if (unreachable != NULL) {
-                    cluster_member_map_remove(&self->members, unreachable);
+                    cluster_member_set_remove(&self->members, unreachable);
                 }
             }
             // Remove this message from the queue.

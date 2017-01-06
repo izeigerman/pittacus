@@ -40,22 +40,22 @@ void cluster_member_destroy(cluster_member_t *result);
 int cluster_member_decode(const uint8_t *buffer, size_t buffer_size, cluster_member_t *member);
 int cluster_member_encode(const cluster_member_t *member, uint8_t *buffer, size_t buffer_size);
 
-typedef struct cluster_member_map {
-    cluster_member_t **map;
+typedef struct cluster_member_set {
+    cluster_member_t **set;
     uint32_t size;
     uint32_t capacity;
-} cluster_member_map_t;
+} cluster_member_set_t;
 
-int cluster_member_map_init(cluster_member_map_t *members);
-int cluster_member_map_put(cluster_member_map_t *members, cluster_member_t *new_members, size_t new_members_size);
-int cluster_member_map_remove(cluster_member_map_t *members, cluster_member_t *member);
-cluster_member_t *cluster_member_map_find_by_addr(cluster_member_map_t *members,
+int cluster_member_set_init(cluster_member_set_t *members);
+int cluster_member_set_put(cluster_member_set_t *members, cluster_member_t *new_members, size_t new_members_size);
+int cluster_member_set_remove(cluster_member_set_t *members, cluster_member_t *member);
+cluster_member_t *cluster_member_set_find_by_addr(cluster_member_set_t *members,
                                                   const pt_sockaddr_storage *addr,
                                                   pt_socklen_t addr_size);
-size_t cluster_member_map_random_member(cluster_member_map_t *members,
+size_t cluster_member_set_random_member(cluster_member_set_t *members,
                                         cluster_member_t **reservoir, size_t reservoir_size);
-void cluster_member_map_item_destroy(cluster_member_t *member);
-void cluster_member_map_destroy(cluster_member_map_t *members);
+void cluster_member_set_item_destroy(cluster_member_t *member);
+void cluster_member_set_destroy(cluster_member_set_t *members);
 
 #ifdef  __cplusplus
 } // extern "C"
