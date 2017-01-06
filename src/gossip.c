@@ -657,7 +657,7 @@ int pittacus_gossip_process_send(pittacus_gossip_t *self) {
         if (++current->attempt_num >= current->max_attempts) {
             // The message exceeded the maximum number of attempts.
 
-            // If the number of maximum attempts is more than 1, than
+            // If the number of maximum attempts is more than 1, then
             // the message required acknowledgement but we didn't receive it.
             // Remove node from the list since it's unreachable.
             if (current->max_attempts > 1) {
