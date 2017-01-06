@@ -157,19 +157,20 @@ void cluster_member_set_destroy(cluster_member_set_t *members) {
     free(members->set);
 }
 
+static void cluster_member_set_shift(cluster_member_set_t *members, uint32_t idx) {
+    for (int i = idx; i < members->size - 1; ++i) {
+        members->set[i] = members->set[i + 1];
+    }
+    --members->size;
+}
+
 int cluster_member_set_remove(cluster_member_set_t *members, cluster_member_t *member) {
-    uint32_t idx = 0;
-    while (idx < members->size) {
-        if (members->set[idx] == member) {
+    for (int i = 0; i < members->size; ++i) {
+        if (members->set[i] == member) {
             cluster_member_set_item_destroy(member);
-            // Shift the list.
-            for (int i = idx; i < members->size - 1; ++i) {
-                members->set[i] = members->set[i + 1];
-            }
-            --members->size;
+            cluster_member_set_shift(members, i);
             return PT_TRUE;
         }
-        ++idx;
     }
     return PT_FALSE;
 }
@@ -181,6 +182,19 @@ cluster_member_t *cluster_member_set_find_by_addr(cluster_member_set_t *members,
         if (memcmp(members->set[i]->address, addr, addr_size) == 0) return members->set[i];
     }
     return NULL;
+}
+
+int cluster_member_set_remove_by_addr(cluster_member_set_t *members,
+                                      const pt_sockaddr_storage *addr,
+                                      pt_socklen_t addr_size) {
+    for (int i = 0; i < members->size; ++i) {
+        if (memcmp(members->set[i]->address, addr, addr_size) == 0) {
+            cluster_member_set_item_destroy(members->set[i]);
+            cluster_member_set_shift(members, i);
+            return PT_TRUE;
+        }
+    }
+    return PT_FALSE;
 }
 
 size_t cluster_member_set_random_member(cluster_member_set_t *members,

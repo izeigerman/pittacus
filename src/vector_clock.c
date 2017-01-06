@@ -99,7 +99,7 @@ void vector_clock_to_string(const vector_clock_t *clock, char *result) {
         str_size = sprintf(cursor, "(%llx:%u)  ",
                            clock->records[i].member_id,
                            clock->records[i].sequence_number);
-        cursor += str_size - 1;
+        cursor += str_size;
     }
 }
 

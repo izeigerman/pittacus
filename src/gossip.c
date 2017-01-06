@@ -661,12 +661,9 @@ int pittacus_gossip_process_send(pittacus_gossip_t *self) {
             // the message required acknowledgement but we didn't receive it.
             // Remove node from the list since it's unreachable.
             if (current->max_attempts > 1) {
-                cluster_member_t *unreachable = cluster_member_set_find_by_addr(&self->members,
-                                                                                &current->recipient,
-                                                                                current->recipient_len);
-                if (unreachable != NULL) {
-                    cluster_member_set_remove(&self->members, unreachable);
-                }
+                cluster_member_set_remove_by_addr(&self->members,
+                                                  &current->recipient,
+                                                  current->recipient_len);
             }
             // Remove this message from the queue.
             gossip_envelope_remove(&self->outbound_messages, current);
