@@ -652,15 +652,20 @@ int pittacus_gossip_process_send(pittacus_gossip_t *self) {
 
         current->attempt_ts = current_ts;
         if (++current->attempt_num >= current->max_attempts) {
-            // The message exceeded the maximum number of attempts.
-            // Remove this message from the queue.
-            gossip_envelope_remove(&self->outbound_messages, current);
             // If the number of maximum attempts is more than 1, than
             // the message required acknowledgement but we didn't receive it.
             // Remove node from the list since it's unreachable.
             if (current->max_attempts > 1) {
-                // TODO: remove member.
+                cluster_member_t *unreachable = cluster_member_map_find_by_addr(&self->members,
+                                                                                &current->recipient,
+                                                                                current->recipient_len);
+                if (unreachable != NULL) {
+                    cluster_member_map_remove(&self->members, unreachable);
+                }
             }
+            // The message exceeded the maximum number of attempts.
+            // Remove this message from the queue.
+            gossip_envelope_remove(&self->outbound_messages, current);
         }
         ++msg_sent;
     }

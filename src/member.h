@@ -47,7 +47,9 @@ typedef struct cluster_member_map {
 int cluster_member_map_init(cluster_member_map_t *members);
 int cluster_member_map_put(cluster_member_map_t *members, cluster_member_t *new_members, size_t new_members_size);
 int cluster_member_map_remove(cluster_member_map_t *members, cluster_member_t *member);
-cluster_member_t *cluster_member_map_find_by_uid(cluster_member_map_t *members, uint32_t uid);
+cluster_member_t *cluster_member_map_find_by_addr(cluster_member_map_t *members,
+                                                  const pt_sockaddr_storage *addr,
+                                                  pt_socklen_t addr_size);
 size_t cluster_member_map_random_member(cluster_member_map_t *members,
                                         cluster_member_t **reservoir, size_t reservoir_size);
 void cluster_member_map_item_destroy(cluster_member_t *member);

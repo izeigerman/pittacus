@@ -29,7 +29,7 @@ static void vector_clock_create_member_id(const cluster_member_t *member, member
         memcpy(result_buf + 4, &addr_in->sin_port, 2);
     } else {
         pt_sockaddr_in6 *addr_in6 = (pt_sockaddr_in6 *) addr;
-        memcpy(result, &addr_in6->sin6_addr, 4);
+        memcpy(result_buf, &addr_in6->sin6_addr, 4);
         memcpy(result_buf + 4, &addr_in6->sin6_port, 2);
     }
     // fill the remaining 2 bytes with member's uid.

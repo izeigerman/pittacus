@@ -86,9 +86,20 @@ int cluster_member_encode(const cluster_member_t *member, uint8_t *buffer, size_
 }
 
 
-static uint32_t cluster_member_map_idx(uint32_t capacity, uint32_t uid) {
+static uint32_t cluster_member_map_idx(uint32_t capacity, const pt_sockaddr_storage *addr) {
     // TODO: should we use hash function instead?
-    return uid % capacity;
+    uint64_t result = 0;
+    uint8_t *result_buf = (uint8_t *) &result;
+    if (addr->ss_family == AF_INET) {
+        pt_sockaddr_in *addr_in = (pt_sockaddr_in *) addr;
+        memcpy(result_buf + 2, &addr_in->sin_addr, 4);
+        memcpy(result_buf + 6, &addr_in->sin_port, 2);
+    } else {
+        pt_sockaddr_in6 *addr_in6 = (pt_sockaddr_in6 *) addr;
+        memcpy(result_buf, &addr_in6->sin6_addr, 6);
+        memcpy(result_buf + 6, &addr_in6->sin6_port, 2);
+    }
+    return result % capacity;
 }
 
 static cluster_member_map_t *cluster_member_map_extend(cluster_member_map_t *members, uint32_t required_size) {
@@ -100,7 +111,7 @@ static cluster_member_map_t *cluster_member_map_extend(cluster_member_map_t *mem
 
     for (int i = 0; i < members->capacity; ++i) {
         if (members->map[i] != NULL) {
-            uint32_t new_idx = cluster_member_map_idx(new_capacity, members->map[i]->uid);
+            uint32_t new_idx = cluster_member_map_idx(new_capacity, members->map[i]->address);
             new_member_map[new_idx] = members->map[i];
         }
     }
@@ -134,7 +145,7 @@ int cluster_member_map_put(cluster_member_map_t *members, cluster_member_t *new_
         if (new_member == NULL) return PITTACUS_ERR_ALLOCATION_FAILED;
 
         cluster_member_copy(new_member, current);
-        uint32_t idx = cluster_member_map_idx(members->capacity, new_member->uid);
+        uint32_t idx = cluster_member_map_idx(members->capacity, new_member->address);
         while (members->map[idx] != NULL && !cluster_member_equals(members->map[idx], new_member)) {
             ++idx;
             if (idx >= members->capacity) idx = 0;
@@ -169,7 +180,7 @@ void cluster_member_map_destroy(cluster_member_map_t *members) {
 int cluster_member_map_remove(cluster_member_map_t *members, cluster_member_t *member) {
     if (members->size == 0) return 0;
     uint32_t seen = 0;
-    uint32_t idx = cluster_member_map_idx(members->capacity, member->uid);
+    uint32_t idx = cluster_member_map_idx(members->capacity, member->address);
     while (seen < members->capacity && members->map[idx] != NULL) {
         if (members->map[idx] == member) {
             cluster_member_map_item_destroy(member);
@@ -183,12 +194,14 @@ int cluster_member_map_remove(cluster_member_map_t *members, cluster_member_t *m
     return 0;
 }
 
-cluster_member_t *cluster_member_map_find_by_uid(cluster_member_map_t *members, uint32_t uid) {
+cluster_member_t *cluster_member_map_find_by_addr(cluster_member_map_t *members,
+                                                  const pt_sockaddr_storage *addr,
+                                                  pt_socklen_t addr_size) {
     if (members->size == 0) return NULL;
     uint32_t seen = 0;
-    uint32_t idx = cluster_member_map_idx(members->capacity, uid);
+    uint32_t idx = cluster_member_map_idx(members->capacity, addr);
     while (seen < members->capacity && members->map[idx] != NULL) {
-        if (members->map[idx]->uid == uid) return members->map[idx];
+        if (memcmp(members->map[idx]->address, addr, addr_size) == 0) return members->map[idx];
         if (++idx >= members->capacity) idx = 0;
         ++seen;
     }
