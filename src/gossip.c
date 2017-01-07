@@ -630,8 +630,34 @@ int pittacus_gossip_process_send(pittacus_gossip_t *self) {
     while (head != NULL) {
         message_envelope_out_t *current = head;
         head = head->next;
-        uint64_t current_ts = pt_time();
 
+        if (current->attempt_num >= current->max_attempts) {
+            // The message exceeded the maximum number of attempts.
+
+            if (current->max_attempts > 1) {
+                // If the number of maximum attempts is more than 1, then
+                // the message required acknowledgement but we've never received it.
+                // Remove node from the list since it's unreachable.
+                cluster_member_set_remove_by_addr(&self->members,
+                                                  &current->recipient,
+                                                  current->recipient_len);
+                // Quite often the same recipient has several messages in a row.
+                // Check whether the next message should be removed as well.
+                message_envelope_out_t *next = current->next;
+                message_envelope_out_t *to_remove = NULL;
+                while (next != NULL && memcmp(&next->recipient, &current->recipient, next->recipient_len) == 0) {
+                    to_remove = next;
+                    next = next->next;
+                    gossip_envelope_remove(&self->outbound_messages, to_remove);
+                }
+                head = next;
+            }
+            // Remove this message from the queue.
+            gossip_envelope_remove(&self->outbound_messages, current);
+            continue;
+        }
+
+        uint64_t current_ts = pt_time();
         if (current->attempt_num != 0 && current->attempt_ts + MESSAGE_RETRY_INTERVAL > current_ts) {
             // It's not yet time to retry this message.
             continue;
@@ -652,23 +678,13 @@ int pittacus_gossip_process_send(pittacus_gossip_t *self) {
         if (write_result < 0) {
             return PITTACUS_ERR_WRITE_FAILED;
         }
-
         current->attempt_ts = current_ts;
-        if (++current->attempt_num >= current->max_attempts) {
-            // The message exceeded the maximum number of attempts.
-
-            // If the number of maximum attempts is more than 1, then
-            // the message required acknowledgement but we never received it.
-            // Remove node from the list since it's unreachable.
-            if (current->max_attempts > 1) {
-                cluster_member_set_remove_by_addr(&self->members,
-                                                  &current->recipient,
-                                                  current->recipient_len);
-            }
-            // Remove this message from the queue.
+        ++current->attempt_num;
+        ++msg_sent;
+        if (current->max_attempts <= 1) {
+            // The message must be sent only once. Remove it immediately.
             gossip_envelope_remove(&self->outbound_messages, current);
         }
-        ++msg_sent;
     }
     return msg_sent;
 }
