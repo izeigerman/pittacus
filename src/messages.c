@@ -280,3 +280,37 @@ int message_ack_encode(const message_ack_t *msg, uint8_t *buffer, size_t buffer_
 
     return cursor - buffer;
 }
+
+int message_heartbeat_decode(const uint8_t *buffer, size_t buffer_size, message_heartbeat_t *result) {
+    RETURN_IF_INVALID_PAYLOAD(MESSAGE_HEARTBEAT_TYPE, PITTACUS_ERR_INVALID_MESSAGE);
+    if (buffer_size < sizeof(message_header_t) + sizeof(uint16_t)) return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
+
+    const uint8_t *cursor = buffer;
+    const uint8_t *buffer_end = buffer + buffer_size;
+
+    if (message_header_decode(cursor, buffer_size, &result->header) < 0) return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
+    cursor += sizeof(message_header_t);
+
+    int decode_result = vector_clock_decode(cursor, buffer_end - cursor, &result->data_version);
+    if (decode_result < 0) return decode_result;
+    cursor += decode_result;
+
+    return cursor - buffer;
+}
+
+int message_heartbeat_encode(const message_heartbeat_t *msg, uint8_t *buffer, size_t buffer_size) {
+    uint32_t expected_size = sizeof(message_header_t) + sizeof(uint16_t) + msg->data_version.size * VECTOR_RECORD_SIZE;
+    if (buffer_size < expected_size) return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
+
+    int encode_result = message_header_encode(&msg->header, buffer, buffer_size);
+    if (encode_result < 0) return encode_result;
+
+    uint8_t *cursor = buffer + encode_result;
+    uint8_t *buffer_end = buffer + buffer_size;
+
+    encode_result = vector_clock_encode(&msg->data_version, cursor, buffer_end - cursor);
+    if (encode_result < 0) return encode_result;
+    cursor += encode_result;
+
+    return cursor - buffer;
+}
