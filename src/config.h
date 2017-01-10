@@ -49,6 +49,11 @@ extern "C" {
 #define MAX_OUTPUT_MESSAGES 100
 #endif
 
+#ifndef GOSSIP_TICK_INTERVAL
+/** Determines the gossip tick interval in milliseconds. */
+#define GOSSIP_TICK_INTERVAL 1000
+#endif
+
 #ifdef  __cplusplus
 } // extern "C"
 #endif

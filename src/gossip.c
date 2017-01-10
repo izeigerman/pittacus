@@ -72,6 +72,8 @@ struct pittacus_gossip {
     cluster_member_t self_address;
     cluster_member_set_t members;
 
+    uint64_t last_gossip_ts;
+
     data_receiver_t data_receiver;
     void *data_receiver_context;
 };
@@ -614,6 +616,8 @@ static int pittacus_gossip_init(pittacus_gossip_t *self,
     cluster_member_init(&self->self_address, &updated_self_addr, updated_self_addr_size);
     cluster_member_set_init(&self->members);
 
+    self->last_gossip_ts = 0;
+
     self->data_receiver = data_receiver;
     self->data_receiver_context = data_receiver_context;
     return PITTACUS_ERR_NONE;
@@ -748,6 +752,20 @@ int pittacus_gossip_process_send(pittacus_gossip_t *self) {
 int pittacus_gossip_send_data(pittacus_gossip_t *self, const uint8_t *data, uint32_t data_size) {
     RETURN_IF_NOT_CONNECTED(self->state);
     return gossip_enqueue_data(self, data, data_size);
+}
+
+int pittacus_gossip_tick(pittacus_gossip_t *self) {
+    RETURN_IF_NOT_CONNECTED(self->state)
+    uint64_t next_gossip_ts = self->last_gossip_ts + GOSSIP_TICK_INTERVAL;
+    uint64_t current_ts = pt_time();
+    if (next_gossip_ts > current_ts) {
+        return next_gossip_ts - current_ts;
+    }
+    int enqueue_result = gossip_enqueue_gossip(self, NULL, 0);
+    if (enqueue_result < 0) return enqueue_result;
+    self->last_gossip_ts = current_ts;
+
+    return GOSSIP_TICK_INTERVAL;
 }
 
 pittacus_gossip_state_t pittacus_gossip_state(pittacus_gossip_t *self) {
