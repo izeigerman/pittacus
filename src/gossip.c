@@ -482,8 +482,10 @@ static int gossip_handle_data(pittacus_gossip_t *self, const message_envelope_in
                                                                    &msg.data_version, PT_TRUE);
 
     if (res == VC_BEFORE) {
-        // Invoke the data receiver callback specified by the user.
-        self->data_receiver(self->data_receiver_context, self, msg.data, msg.data_size);
+        if (self->data_receiver) {
+            // Invoke the data receiver callback specified by the user.
+            self->data_receiver(self->data_receiver_context, self, msg.data, msg.data_size);
+        }
         // Enqueue the same message to send it to N random members later.
         return gossip_enqueue_message(self, MESSAGE_DATA_TYPE, &msg, NULL, 0, GOSSIP_RANDOM);
     }
