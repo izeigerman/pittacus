@@ -246,9 +246,9 @@ static int gossip_encode_message(uint8_t msg_type, const void *msg, uint8_t *buf
             // outbound queue after the first attempt.
             *max_attempts = 1;
             break;
-        case MESSAGE_HEARTBEAT_TYPE:
-            encode_result = message_heartbeat_encode((const message_heartbeat_t *) msg,
-                                                     buffer, MESSAGE_MAX_SIZE);
+        case MESSAGE_GOSSIP_TYPE:
+            encode_result = message_gossip_encode((const message_gossip_t *) msg,
+                                                  buffer, MESSAGE_MAX_SIZE);
             break;
         default:
             return PITTACUS_ERR_INVALID_MESSAGE;
@@ -355,15 +355,15 @@ static int gossip_enqueue_data(pittacus_gossip_t *self,
                                   NULL, 0, GOSSIP_RANDOM);
 }
 
-static int gossip_enqueue_heartbeat(pittacus_gossip_t *self,
-                                    const pt_sockaddr_storage *recipient,
-                                    pt_socklen_t recipient_len) {
-    message_heartbeat_t heartbeat_msg;
-    message_header_init(&heartbeat_msg.header, MESSAGE_HEARTBEAT_TYPE, 0);
-    vector_clock_copy(&heartbeat_msg.data_version, &self->data_version);
+static int gossip_enqueue_gossip(pittacus_gossip_t *self,
+                                 const pt_sockaddr_storage *recipient,
+                                 pt_socklen_t recipient_len) {
+    message_gossip_t gossip_msg;
+    message_header_init(&gossip_msg.header, MESSAGE_GOSSIP_TYPE, 0);
+    vector_clock_copy(&gossip_msg.data_version, &self->data_version);
 
     gossip_spreading_type_t spreading_type = recipient == NULL ? GOSSIP_RANDOM : GOSSIP_DIRECT;
-    return gossip_enqueue_message(self, MESSAGE_HEARTBEAT_TYPE, &heartbeat_msg,
+    return gossip_enqueue_message(self, MESSAGE_GOSSIP_TYPE, &gossip_msg,
                                   NULL, 0, spreading_type);
 }
 
@@ -524,15 +524,15 @@ static int gossip_handle_ack(pittacus_gossip_t *self, const message_envelope_in_
     return PITTACUS_ERR_NONE;
 }
 
-static int gossip_handle_heartbeat(pittacus_gossip_t *self, const message_envelope_in_t *envelope_in) {
+static int gossip_handle_gossip(pittacus_gossip_t *self, const message_envelope_in_t *envelope_in) {
     RETURN_IF_NOT_CONNECTED(self->state);
-    message_heartbeat_t msg;
-    int decode_result = message_heartbeat_decode(envelope_in->buffer, envelope_in->buffer_size, &msg);
+    message_gossip_t msg;
+    int decode_result = message_gossip_decode(envelope_in->buffer, envelope_in->buffer_size, &msg);
     if (decode_result < 0) {
         return decode_result;
     }
 
-    // Acknowledge the arrived Heartbeat message.
+    // Acknowledge the arrived Gossip message.
     gossip_enqueue_ack(self, msg.header.sequence_num, envelope_in->sender, envelope_in->sender_len);
 
     vector_clock_comp_res_t comp_res = vector_clock_compare(&self->data_version, &msg.data_version, PT_FALSE);
@@ -542,15 +542,15 @@ static int gossip_handle_heartbeat(pittacus_gossip_t *self, const message_envelo
             // TODO: enqueue data messages.
             break;
         case VC_BEFORE:
-            // This node is behind. Send back the Heartbeat message to request the data update.
-            gossip_enqueue_heartbeat(self, envelope_in->sender, envelope_in->sender_len);
+            // This node is behind. Send back the Gossip message to request the data update.
+            gossip_enqueue_gossip(self, envelope_in->sender, envelope_in->sender_len);
             break;
         case VC_CONFLICT:
             // The conflict occurred. Both nodes should exchange data with each other.
             // Send the data messages.
             // TODO: enqueue data messages.
             // Request the data update.
-            gossip_enqueue_heartbeat(self, envelope_in->sender, envelope_in->sender_len);
+            gossip_enqueue_gossip(self, envelope_in->sender, envelope_in->sender_len);
             break;
         default:
             break;
@@ -578,8 +578,8 @@ static int gossip_handle_new_message(pittacus_gossip_t *self, const message_enve
         case MESSAGE_ACK_TYPE:
             result = gossip_handle_ack(self, envelope_in);
             break;
-        case MESSAGE_HEARTBEAT_TYPE:
-            result = gossip_handle_heartbeat(self, envelope_in);
+        case MESSAGE_GOSSIP_TYPE:
+            result = gossip_handle_gossip(self, envelope_in);
             break;
         default:
             return PITTACUS_ERR_INVALID_MESSAGE;
