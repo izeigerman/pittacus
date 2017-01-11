@@ -54,6 +54,10 @@ extern "C" {
 #define GOSSIP_TICK_INTERVAL 1000
 #endif
 
+#ifndef DATA_LOG_SIZE
+#define DATA_LOG_SIZE 25
+#endif
+
 #ifdef  __cplusplus
 } // extern "C"
 #endif

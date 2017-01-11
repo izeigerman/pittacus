@@ -53,6 +53,18 @@ typedef struct message_queue {
     message_envelope_out_t *tail;
 } message_queue_t;
 
+typedef struct data_log_record {
+    vector_record_t version;
+    uint16_t data_size;
+    uint8_t data[MESSAGE_MAX_SIZE];
+} data_log_record_t;
+
+typedef struct data_log {
+    data_log_record_t messages[DATA_LOG_SIZE];
+    uint32_t size;
+    uint32_t current_idx;
+} data_log_t;
+
 #define INPUT_BUFFER_SIZE MESSAGE_MAX_SIZE
 #define OUTPUT_BUFFER_SIZE MAX_OUTPUT_MESSAGES * MESSAGE_MAX_SIZE
 struct pittacus_gossip {
@@ -72,11 +84,35 @@ struct pittacus_gossip {
     cluster_member_t self_address;
     cluster_member_set_t members;
 
+    data_log_t data_log;
+
     uint64_t last_gossip_ts;
 
     data_receiver_t data_receiver;
     void *data_receiver_context;
 };
+
+static int gossip_data_log_create_message(const data_log_record_t *record, message_data_t *msg) {
+    message_header_init(&msg->header, MESSAGE_DATA_TYPE, 0);
+    vector_clock_record_copy(&msg->data_version, &record->version);
+    msg->data = (uint8_t *) record->data;
+    msg->data_size = record->data_size;
+    return PITTACUS_ERR_NONE;
+}
+
+static int gossip_data_log(data_log_t *log, const message_data_t *msg) {
+    uint32_t new_idx = log->current_idx;
+
+    data_log_record_t *record = &log->messages[new_idx];
+    vector_clock_record_copy(&record->version, &msg->data_version);
+
+    record->data_size = msg->data_size;
+    memcpy(record->data, msg->data, msg->data_size);
+
+    if (log->size < DATA_LOG_SIZE) ++log->size;
+    if (++log->current_idx >= DATA_LOG_SIZE) log->current_idx = 0;
+    return PITTACUS_ERR_NONE;
+}
 
 static message_envelope_out_t *gossip_envelope_create(
         uint32_t sequence_number,
@@ -353,6 +389,10 @@ static int gossip_enqueue_data(pittacus_gossip_t *self,
     vector_clock_record_copy(&data_msg.data_version, record);
     data_msg.data = (uint8_t *) data;
     data_msg.data_size = data_size;
+
+    // Add the data to our internal log.
+    gossip_data_log(&self->data_log, &data_msg);
+
     return gossip_enqueue_message(self, MESSAGE_DATA_TYPE, &data_msg,
                                   NULL, 0, GOSSIP_RANDOM);
 }
@@ -366,7 +406,7 @@ static int gossip_enqueue_gossip(pittacus_gossip_t *self,
 
     gossip_spreading_type_t spreading_type = recipient == NULL ? GOSSIP_RANDOM : GOSSIP_DIRECT;
     return gossip_enqueue_message(self, MESSAGE_GOSSIP_TYPE, &gossip_msg,
-                                  NULL, 0, spreading_type);
+                                  recipient, recipient_len, spreading_type);
 }
 
 #define MEMBER_LIST_SYNC_SIZE (MESSAGE_MAX_SIZE / CLUSTER_MEMBER_SIZE)
@@ -409,6 +449,27 @@ static int gossip_enqueue_member_list(pittacus_gossip_t *self,
         to_send_idx = 0;
     }
     free(members_to_send);
+    return result;
+}
+
+static int gossip_enqueue_data_log(pittacus_gossip_t *self,
+                                   vector_clock_t *recipient_version,
+                                   const pt_sockaddr_storage *recipient,
+                                   pt_socklen_t recipient_len) {
+    int result = PITTACUS_ERR_NONE;
+    for (int i = 0; i < self->data_log.size; ++i) {
+        const data_log_record_t *record = &self->data_log.messages[i];
+        if (vector_clock_compare_with_record(recipient_version, &record->version, PT_FALSE) == VC_BEFORE) {
+            // The recipient data version is behind. Enqueue this data payload.
+            message_data_t data_msg;
+            result = gossip_data_log_create_message(record, &data_msg);
+            if (result < 0) return result;
+
+            result = gossip_enqueue_message(self, MESSAGE_DATA_TYPE, &data_msg,
+                                            recipient, recipient_len, GOSSIP_DIRECT);
+            if (result < 0) return result;
+        }
+    }
     return result;
 }
 
@@ -500,6 +561,9 @@ static int gossip_handle_data(pittacus_gossip_t *self, const message_envelope_in
                                                                    &msg.data_version, PT_TRUE);
 
     if (res == VC_BEFORE) {
+        // Add the data to our internal log.
+        gossip_data_log(&self->data_log, &msg);
+
         if (self->data_receiver) {
             // Invoke the data receiver callback specified by the user.
             self->data_receiver(self->data_receiver_context, self, msg.data, msg.data_size);
@@ -537,28 +601,33 @@ static int gossip_handle_gossip(pittacus_gossip_t *self, const message_envelope_
     // Acknowledge the arrived Gossip message.
     gossip_enqueue_ack(self, msg.header.sequence_num, envelope_in->sender, envelope_in->sender_len);
 
+    int result = PITTACUS_ERR_NONE;
+
     vector_clock_comp_res_t comp_res = vector_clock_compare(&self->data_version, &msg.data_version, PT_FALSE);
     switch (comp_res) {
         case VC_AFTER:
             // The remote node is missing some of the data messages.
-            // TODO: enqueue data messages.
+            result = gossip_enqueue_data_log(self, &msg.data_version,
+                                             envelope_in->sender, envelope_in->sender_len);
             break;
         case VC_BEFORE:
             // This node is behind. Send back the Gossip message to request the data update.
-            gossip_enqueue_gossip(self, envelope_in->sender, envelope_in->sender_len);
+            result = gossip_enqueue_gossip(self, envelope_in->sender, envelope_in->sender_len);
             break;
         case VC_CONFLICT:
-            // The conflict occurred. Both nodes should exchange data with each other.
-            // Send the data messages.
-            // TODO: enqueue data messages.
+            // The conflict occurred. Both nodes should exchange the data with each other.
+            // Send the data messages from the log.
+            result = gossip_enqueue_data_log(self, &msg.data_version,
+                                             envelope_in->sender, envelope_in->sender_len);
+            if (result < 0) return result;
             // Request the data update.
-            gossip_enqueue_gossip(self, envelope_in->sender, envelope_in->sender_len);
+            result = gossip_enqueue_gossip(self, envelope_in->sender, envelope_in->sender_len);
             break;
         default:
             break;
     }
 
-    return 0;
+    return result;
 }
 
 static int gossip_handle_new_message(pittacus_gossip_t *self, const message_envelope_in_t *envelope_in) {
@@ -615,6 +684,9 @@ static int pittacus_gossip_init(pittacus_gossip_t *self,
     self->state = STATE_INITIALIZED;
     cluster_member_init(&self->self_address, &updated_self_addr, updated_self_addr_size);
     cluster_member_set_init(&self->members);
+
+    self->data_log.current_idx = 0;
+    self->data_log.size = 0;
 
     self->last_gossip_ts = 0;
 
@@ -755,7 +827,7 @@ int pittacus_gossip_send_data(pittacus_gossip_t *self, const uint8_t *data, uint
 }
 
 int pittacus_gossip_tick(pittacus_gossip_t *self) {
-    RETURN_IF_NOT_CONNECTED(self->state)
+    if (self->state != STATE_CONNECTED) return GOSSIP_TICK_INTERVAL;
     uint64_t next_gossip_ts = self->last_gossip_ts + GOSSIP_TICK_INTERVAL;
     uint64_t current_ts = pt_time();
     if (next_gossip_ts > current_ts) {
