@@ -2,7 +2,7 @@
 Pittacus - is an extremely small gossip protocol implementation in pure C. Its main goal is a data dissemination rather than membership management.
 The crucial features and advantages of Pittacus are the following:
 * Allows to build a fully decentralized P2P cluster without a single server instance.
-* Thus is a very lightweight library with zero external dependencies.
+* Pittacus is a very lightweight library with zero external dependencies.
 * Utilizes UDP for the transport layer.
 * Very tiny and adjustable memory footprint.
 * Small protocol overhead.
