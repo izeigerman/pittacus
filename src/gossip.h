@@ -123,7 +123,7 @@ int pittacus_gossip_send_data(pittacus_gossip_t *self, const uint8_t *data, uint
 /**
  * Processes the Gossip tick event.
  * Note: no actions will be performed if the time for the next tick
- * has not yet come. The return value will be recalculated according
+ * has not yet come. However the return value will be recalculated according
  * to the time that has passed since the last tick.
  *
  * @param self a gossip descriptor instance.
