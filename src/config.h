@@ -50,7 +50,7 @@ extern "C" {
 #endif
 
 #ifndef GOSSIP_TICK_INTERVAL
-/** Determines the gossip tick interval in milliseconds. */
+/** The time interval in milliseconds that determines how often the Gossip tick event should be triggered. */
 #define GOSSIP_TICK_INTERVAL 1000
 #endif
 
