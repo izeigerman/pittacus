@@ -27,10 +27,6 @@ const char DATA_MESSAGE[] = "Hi there";
 void data_receiver(void *context, pittacus_gossip_t *gossip, const uint8_t *data, size_t data_size) {
     // This function is invoked every time when a new data arrives.
     printf("Data arrived: %s\n", data);
-    // Send something back.
-    char msg[256];
-    int msg_size = snprintf(msg, 256, "%s (response ts = %lu)", DATA_MESSAGE, time(NULL)) + 1;
-    pittacus_gossip_send_data(gossip, (const uint8_t *) msg, msg_size);
 }
 
 int main(int argc, char **argv) {

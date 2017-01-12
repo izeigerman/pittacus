@@ -34,8 +34,10 @@ int main(int argc, char **argv) {
     if (argc > 1) {
         node_id = argv[1];
     }
+    char message_with_ts[256];
+    size_t message_with_ts_size = 0;
     char message[256];
-    size_t message_size = sprintf(message, "[%s]: %s", node_id, DATA_MESSAGE) + 1;
+    sprintf(message, "[%s]: %s", node_id, DATA_MESSAGE);
 
     struct sockaddr_in self_in;
     self_in.sin_family = AF_INET;
@@ -128,7 +130,8 @@ int main(int argc, char **argv) {
         time_t current_time = time(NULL);
         if (previous_data_msg_ts + send_data_interval <= current_time) {
             previous_data_msg_ts = current_time;
-            pittacus_gossip_send_data(gossip, (const uint8_t *) message, message_size);
+            message_with_ts_size = sprintf(message_with_ts, "%s (ts = %ld)", message, current_time) + 1;
+            pittacus_gossip_send_data(gossip, (const uint8_t *) message_with_ts, message_with_ts_size);
         }
         // Tell Pittacus to write existing messages to the socket.
         send_result = pittacus_gossip_process_send(gossip);
