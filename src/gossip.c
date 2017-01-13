@@ -295,8 +295,8 @@ static int gossip_encode_message(uint8_t msg_type, const void *msg, uint8_t *buf
             // outbound queue after the first attempt.
             *max_attempts = 1;
             break;
-        case MESSAGE_GOSSIP_TYPE:
-            encode_result = message_gossip_encode((const message_gossip_t *) msg,
+        case MESSAGE_STATUS_TYPE:
+            encode_result = message_status_encode((const message_status_t *) msg,
                                                   buffer, MESSAGE_MAX_SIZE);
             break;
         default:
@@ -408,15 +408,15 @@ static int gossip_enqueue_data(pittacus_gossip_t *self,
                                   NULL, 0, GOSSIP_RANDOM);
 }
 
-static int gossip_enqueue_gossip(pittacus_gossip_t *self,
+static int gossip_enqueue_status(pittacus_gossip_t *self,
                                  const pt_sockaddr_storage *recipient,
                                  pt_socklen_t recipient_len) {
-    message_gossip_t gossip_msg;
-    message_header_init(&gossip_msg.header, MESSAGE_GOSSIP_TYPE, 0);
-    vector_clock_copy(&gossip_msg.data_version, &self->data_version);
+    message_status_t status_msg;
+    message_header_init(&status_msg.header, MESSAGE_STATUS_TYPE, 0);
+    vector_clock_copy(&status_msg.data_version, &self->data_version);
 
     gossip_spreading_type_t spreading_type = recipient == NULL ? GOSSIP_RANDOM : GOSSIP_DIRECT;
-    return gossip_enqueue_message(self, MESSAGE_GOSSIP_TYPE, &gossip_msg,
+    return gossip_enqueue_message(self, MESSAGE_STATUS_TYPE, &status_msg,
                                   recipient, recipient_len, spreading_type);
 }
 
@@ -601,15 +601,15 @@ static int gossip_handle_ack(pittacus_gossip_t *self, const message_envelope_in_
     return PITTACUS_ERR_NONE;
 }
 
-static int gossip_handle_gossip(pittacus_gossip_t *self, const message_envelope_in_t *envelope_in) {
+static int gossip_handle_status(pittacus_gossip_t *self, const message_envelope_in_t *envelope_in) {
     RETURN_IF_NOT_CONNECTED(self->state);
-    message_gossip_t msg;
-    int decode_result = message_gossip_decode(envelope_in->buffer, envelope_in->buffer_size, &msg);
+    message_status_t msg;
+    int decode_result = message_status_decode(envelope_in->buffer, envelope_in->buffer_size, &msg);
     if (decode_result < 0) {
         return decode_result;
     }
 
-    // Acknowledge the arrived Gossip message.
+    // Acknowledge the arrived Status message.
     gossip_enqueue_ack(self, msg.header.sequence_num, envelope_in->sender, envelope_in->sender_len);
 
     int result = PITTACUS_ERR_NONE;
@@ -622,8 +622,8 @@ static int gossip_handle_gossip(pittacus_gossip_t *self, const message_envelope_
                                              envelope_in->sender, envelope_in->sender_len);
             break;
         case VC_BEFORE:
-            // This node is behind. Send back the Gossip message to request the data update.
-            result = gossip_enqueue_gossip(self, envelope_in->sender, envelope_in->sender_len);
+            // This node is behind. Send back the Status message to request the data update.
+            result = gossip_enqueue_status(self, envelope_in->sender, envelope_in->sender_len);
             break;
         case VC_CONFLICT:
             // The conflict occurred. Both nodes should exchange the data with each other.
@@ -632,7 +632,7 @@ static int gossip_handle_gossip(pittacus_gossip_t *self, const message_envelope_
                                              envelope_in->sender, envelope_in->sender_len);
             if (result < 0) return result;
             // Request the data update.
-            result = gossip_enqueue_gossip(self, envelope_in->sender, envelope_in->sender_len);
+            result = gossip_enqueue_status(self, envelope_in->sender, envelope_in->sender_len);
             break;
         default:
             break;
@@ -660,8 +660,8 @@ static int gossip_handle_new_message(pittacus_gossip_t *self, const message_enve
         case MESSAGE_ACK_TYPE:
             result = gossip_handle_ack(self, envelope_in);
             break;
-        case MESSAGE_GOSSIP_TYPE:
-            result = gossip_handle_gossip(self, envelope_in);
+        case MESSAGE_STATUS_TYPE:
+            result = gossip_handle_status(self, envelope_in);
             break;
         default:
             return PITTACUS_ERR_INVALID_MESSAGE;
@@ -844,7 +844,7 @@ int pittacus_gossip_tick(pittacus_gossip_t *self) {
     if (next_gossip_ts > current_ts) {
         return next_gossip_ts - current_ts;
     }
-    int enqueue_result = gossip_enqueue_gossip(self, NULL, 0);
+    int enqueue_result = gossip_enqueue_status(self, NULL, 0);
     if (enqueue_result < 0) return enqueue_result;
     self->last_gossip_ts = current_ts;
 

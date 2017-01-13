@@ -67,11 +67,11 @@ typedef struct message_data {
     uint8_t *data;
 } message_data_t;
 
-#define MESSAGE_GOSSIP_TYPE 0x06
-typedef struct message_gossip {
+#define MESSAGE_STATUS_TYPE 0x06
+typedef struct message_status {
     message_header_t header;
     vector_clock_t data_version;
-} message_gossip_t;
+} message_status_t;
 
 void message_header_init(message_header_t *header, uint8_t message_type, uint32_t sequence_number);
 
@@ -81,7 +81,7 @@ int message_welcome_decode(const uint8_t *buffer, size_t buffer_size, message_we
 int message_data_decode(const uint8_t *buffer, size_t buffer_size, message_data_t *result);
 int message_member_list_decode(const uint8_t *buffer, size_t buffer_size, message_member_list_t *result);
 int message_ack_decode(const uint8_t *buffer, size_t buffer_size, message_ack_t *result);
-int message_gossip_decode(const uint8_t *buffer, size_t buffer_size, message_gossip_t *result);
+int message_status_decode(const uint8_t *buffer, size_t buffer_size, message_status_t *result);
 
 void message_hello_destroy(const message_hello_t *msg);
 void message_welcome_destroy(const message_welcome_t *msg);
@@ -92,7 +92,7 @@ int message_welcome_encode(const message_welcome_t *msg, uint8_t *buffer, size_t
 int message_data_encode(const message_data_t *msg, uint8_t *buffer, size_t buffer_size);
 int message_member_list_encode(const message_member_list_t *msg, uint8_t *buffer, size_t buffer_size);
 int message_ack_encode(const message_ack_t *msg, uint8_t *buffer, size_t buffer_size);
-int message_gossip_encode(const message_gossip_t *msg, uint8_t *buffer, size_t buffer_size);
+int message_status_encode(const message_status_t *msg, uint8_t *buffer, size_t buffer_size);
 
 #ifdef  __cplusplus
 } // extern "C"
