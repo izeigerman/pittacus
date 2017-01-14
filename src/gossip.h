@@ -121,6 +121,18 @@ int pittacus_gossip_process_send(pittacus_gossip_t *self);
 int pittacus_gossip_send_data(pittacus_gossip_t *self, const uint8_t *data, uint32_t data_size);
 
 /**
+ * Processes the Gossip tick event.
+ * Note: no actions will be performed if the time for the next tick
+ * has not yet come. However the return value will be recalculated according
+ * to the time that has passed since the last tick.
+ *
+ * @param self a gossip descriptor instance.
+ * @return a time interval in milliseconds when the next gossip
+ *         tick should happen, or negative value if the error occurred.
+ */
+int pittacus_gossip_tick(pittacus_gossip_t *self);
+
+/**
  * Retrieves a current state of this node.
  *
  * @param self a gossip descriptor instance.

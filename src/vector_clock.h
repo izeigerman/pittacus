@@ -55,6 +55,7 @@ vector_record_t *vector_clock_increment(vector_clock_t *clock, const cluster_mem
 void vector_clock_to_string(const vector_clock_t *clock, char *result);
 
 int vector_clock_record_copy(vector_record_t *dst, const vector_record_t *src);
+int vector_clock_copy(vector_clock_t *dst, const vector_clock_t *src);
 
 /**
  * Compares 2 vector clocks. If the "merge" parameter is set to true, 2 clocks
@@ -92,6 +93,8 @@ vector_clock_comp_res_t vector_clock_compare_with_record(vector_clock_t *clock,
 
 int vector_clock_record_decode(const uint8_t *buffer, size_t buffer_size, vector_record_t *result);
 int vector_clock_record_encode(const vector_record_t *record, uint8_t *buffer, size_t buffer_size);
+int vector_clock_decode(const uint8_t *buffer, size_t buffer_size, vector_clock_t *result);
+int vector_clock_encode(const vector_clock_t *clock, uint8_t *buffer, size_t buffer_size);
 
 #ifdef  __cplusplus
 } // extern "C"

@@ -49,6 +49,15 @@ extern "C" {
 #define MAX_OUTPUT_MESSAGES 100
 #endif
 
+#ifndef GOSSIP_TICK_INTERVAL
+/** The time interval in milliseconds that determines how often the Gossip tick event should be triggered. */
+#define GOSSIP_TICK_INTERVAL 1000
+#endif
+
+#ifndef DATA_LOG_SIZE
+#define DATA_LOG_SIZE 25
+#endif
+
 #ifdef  __cplusplus
 } // extern "C"
 #endif

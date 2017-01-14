@@ -109,6 +109,15 @@ int vector_clock_record_copy(vector_record_t *dst, const vector_record_t *src) {
     return PITTACUS_ERR_NONE;
 }
 
+int vector_clock_copy(vector_clock_t *dst, const vector_clock_t *src) {
+    dst->size = src->size;
+    dst->current_idx = src->current_idx;
+    for (int i = 0; i < src->size; ++i) {
+        vector_clock_record_copy(&dst->records[i], &src->records[i]);
+    }
+    return PITTACUS_ERR_NONE;
+}
+
 static vector_clock_comp_res_t vector_clock_resolve_comp_result(vector_clock_comp_res_t prev,
                                                                 vector_clock_comp_res_t new) {
     return (prev != VC_EQUAL && new != prev) ? VC_CONFLICT : new;
@@ -208,6 +217,46 @@ int vector_clock_record_encode(const vector_record_t *record, uint8_t *buffer, s
 
     memcpy(cursor, &record->member_id, MEMBER_ID_SIZE);
     cursor += MEMBER_ID_SIZE;
+
+    return cursor - buffer;
+}
+
+int vector_clock_decode(const uint8_t *buffer, size_t buffer_size, vector_clock_t *result) {
+    const uint8_t *cursor = buffer;
+    const uint8_t *buffer_end = buffer + buffer_size;
+
+    uint16_t size = uint16_decode(buffer);
+    cursor += sizeof(uint16_t);
+    if (buffer_end - cursor < size * VECTOR_RECORD_SIZE) return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
+
+    result->size = size;
+    result->current_idx = 0;
+
+    int decode_result = 0;
+    for (int i = 0; i < size; ++i) {
+        decode_result = vector_clock_record_decode(cursor, buffer_end - cursor, &result->records[i]);
+        if (decode_result < 0) return decode_result;
+        cursor += VECTOR_RECORD_SIZE;
+    }
+
+    return cursor - buffer;
+}
+
+int vector_clock_encode(const vector_clock_t *clock, uint8_t *buffer, size_t buffer_size) {
+    if (buffer_size < sizeof(uint16_t) + clock->size * VECTOR_RECORD_SIZE) return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
+
+    uint8_t *cursor = buffer;
+    uint8_t *buffer_end = buffer + buffer_size;
+
+    uint16_encode(clock->size, cursor);
+    cursor += sizeof(uint16_t);
+
+    int encode_result = 0;
+    for (int i = 0; i < clock->size; ++i) {
+        encode_result = vector_clock_record_encode(&clock->records[i], cursor, buffer_end - cursor);
+        if (encode_result < 0) return encode_result;
+        cursor += encode_result;
+    }
 
     return cursor - buffer;
 }

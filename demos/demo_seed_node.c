@@ -20,16 +20,13 @@
 #include <poll.h>
 #include <time.h>
 #include "gossip.h"
+#include "config.h"
 
 const char DATA_MESSAGE[] = "Hi there";
 
 void data_receiver(void *context, pittacus_gossip_t *gossip, const uint8_t *data, size_t data_size) {
     // This function is invoked every time when a new data arrives.
     printf("Data arrived: %s\n", data);
-    // Send something back.
-    char msg[256];
-    int msg_size = snprintf(msg, 256, "%s (response ts = %lu)", DATA_MESSAGE, time(NULL)) + 1;
-    pittacus_gossip_send_data(gossip, (const uint8_t *) msg, msg_size);
 }
 
 int main(int argc, char **argv) {
@@ -67,14 +64,14 @@ int main(int argc, char **argv) {
         .revents = 0
     };
 
-    int poll_timeout = 1000;
+    int poll_interval = GOSSIP_TICK_INTERVAL;
     int recv_result = 0;
     int send_result = 0;
     int poll_result = 0;
     while (1) {
         gossip_poll_fd.revents = 0;
 
-        poll_result = poll(&gossip_poll_fd, 1, poll_timeout);
+        poll_result = poll(&gossip_poll_fd, 1, poll_interval);
         if (poll_result > 0) {
             if (gossip_poll_fd.revents & POLLERR) {
                 fprintf(stderr, "Gossip socket failure: %s\n", strerror(errno));
@@ -92,6 +89,13 @@ int main(int argc, char **argv) {
         } else if (poll_result < 0) {
             fprintf(stderr, "Poll failed: %s\n", strerror(errno));
             pittacus_gossip_destroy(gossip);
+            return -1;
+        }
+        // Try to trigger the Gossip tick event and recalculate
+        // the poll interval.
+        poll_interval = pittacus_gossip_tick(gossip);
+        if (poll_interval < 0) {
+            fprintf(stderr, "Gossip tick failed: %d\n", poll_interval);
             return -1;
         }
         // Tell Pittacus to write existing messages to the socket.
