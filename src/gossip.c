@@ -510,8 +510,6 @@ static int gossip_handle_hello(pittacus_gossip_t *self, const message_envelope_i
     // Update our local storage with a new member.
     cluster_member_set_put(&self->members, msg.this_member, 1);
 
-    // FIXME: send the existing data messages
-
     message_hello_destroy(&msg);
     return PITTACUS_ERR_NONE;
 }
