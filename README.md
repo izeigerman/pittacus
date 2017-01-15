@@ -19,7 +19,7 @@ NOTE: at this point Pittacus is in active development stage. It can be used for 
 TBD
 
 # How to build
-Install CMake >= 3.6.
+Install CMake >= 3.0.
 ```
 git clone https://github.com/izeigerman/pittacus.git
 cd pittacus
