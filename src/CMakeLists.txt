@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -std=c99 -O2 -fPIC")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -std=gnu99 -O2 -fPIC")
 
 file(GLOB SOURCE_FILES "*.c")
 
