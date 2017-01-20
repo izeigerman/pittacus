@@ -132,6 +132,7 @@ int message_welcome_decode(const uint8_t *buffer, size_t buffer_size, message_we
 
     decode_result = cluster_member_decode(cursor, buffer_end - cursor, result->this_member);
     if (decode_result < 0) return decode_result;
+    cursor += decode_result;
 
     return cursor - buffer;
 }
@@ -210,11 +211,14 @@ int message_data_encode(const message_data_t *msg, uint8_t *buffer, size_t buffe
 
 int message_member_list_decode(const uint8_t *buffer, size_t buffer_size, message_member_list_t *result) {
     RETURN_IF_INVALID_PAYLOAD(MESSAGE_MEMBER_LIST_TYPE, PITTACUS_ERR_INVALID_MESSAGE);
+    if (buffer_size < sizeof(message_header_t) + sizeof(uint16_t)) return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
 
     const uint8_t *cursor = buffer;
+    const uint8_t *buffer_end = buffer + buffer_size;
 
-    if (message_header_decode(cursor, buffer_size, &result->header) < 0) return PITTACUS_ERR_BUFFER_NOT_ENOUGH;
-    cursor += sizeof(message_header_t);
+    int decode_result = message_header_decode(cursor, buffer_size, &result->header);
+    if (decode_result < 0) return decode_result;
+    cursor += decode_result;
 
     result->members_n = uint16_decode(cursor);
     cursor += sizeof(uint16_t);
@@ -222,9 +226,10 @@ int message_member_list_decode(const uint8_t *buffer, size_t buffer_size, messag
     result->members = (cluster_member_t *) malloc(result->members_n * sizeof(cluster_member_t));
     if (result->members == NULL) return PITTACUS_ERR_ALLOCATION_FAILED;
 
-    const uint8_t *buffer_end = buffer + buffer_size;
     for (int i = 0; i < result->members_n; ++i) {
-        cursor += cluster_member_decode(cursor, buffer_end - cursor, &result->members[i]);
+        decode_result = cluster_member_decode(cursor, buffer_end - cursor, &result->members[i]);
+        if (decode_result < 0) return decode_result;
+        cursor += decode_result;
     }
 
     return cursor - buffer;
