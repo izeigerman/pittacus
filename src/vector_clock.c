@@ -157,11 +157,10 @@ vector_clock_comp_res_t vector_clock_compare(vector_clock_t *first,
 
     for (int i = 0; i < first->size; ++i) {
         int second_idx = vector_clock_find_by_member_id(second, &first->records[i].member_id);
-        second_visited_idxs |= (1 << second_idx);
-
         if (second_idx < 0) {
             result = vector_clock_resolve_comp_result(result, VC_AFTER);
         } else {
+            second_visited_idxs |= (1 << second_idx);
             uint32_t first_seq_num = first->records[i].sequence_number;
             uint32_t second_seq_num = second->records[second_idx].sequence_number;
             if (first_seq_num > second_seq_num) {

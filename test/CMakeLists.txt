@@ -16,10 +16,16 @@
 
 include_directories(../src)
 
-file(GLOB TEST_SOURCES "*.c")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -std=gnu99")
+set(TEST_SHARED_SOURCE_FILES test_utils.c)
+set(TEST_SOURCE_FILES messages_test.c vector_clock_test.c)
 
-foreach(TEST_SRC ${TEST_SOURCES})
+add_library(pittacus_test_obj OBJECT ${TEST_SHARED_SOURCE_FILES})
+
+foreach(TEST_SRC ${TEST_SOURCE_FILES})
     get_filename_component(TEST_NAME ${TEST_SRC} NAME_WE)
-    add_executable(${TEST_NAME} ${TEST_SRC} $<TARGET_OBJECTS:pittacus_obj>)
+    add_executable(${TEST_NAME} ${TEST_SRC}
+                   $<TARGET_OBJECTS:pittacus_obj>
+                   $<TARGET_OBJECTS:pittacus_test_obj>)
     add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
 endforeach(TEST_SRC)

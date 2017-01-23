@@ -17,18 +17,10 @@
 #include "member.h"
 #include "network.h"
 #include "errors.h"
+#include "test_utils.h"
 #include <assert.h>
 #include <string.h>
 #include <stdint.h>
-
-int create_member(uint16_t port, cluster_member_t *result) {
-    pt_sockaddr_in in;
-    in.sin_family = AF_INET;
-    in.sin_port = PT_HTONS(port);
-    inet_aton("127.0.0.1", &in.sin_addr);
-
-    return cluster_member_init(result, (const pt_sockaddr_storage *)&in, sizeof(pt_sockaddr_in));
-}
 
 void validate_headers(const message_header_t *expected, const message_header_t *actual) {
     assert(strcmp(expected->protocol_id, actual->protocol_id) == 0);
@@ -49,7 +41,7 @@ void test_message_hello_enc_dec() {
     message_header_init(&msg.header, MESSAGE_HELLO_TYPE, 1);
 
     cluster_member_t member;
-    assert(create_member(12345, &member) == 0);
+    assert(create_test_member(12345, &member) == 0);
     msg.this_member = &member;
 
     uint8_t buf[MESSAGE_MAX_SIZE];
@@ -78,7 +70,7 @@ void test_message_welcome_enc_dec() {
     msg.hello_sequence_num = 2;
 
     cluster_member_t member;
-    assert(create_member(12345, &member) == 0);
+    assert(create_test_member(12345, &member) == 0);
     msg.this_member = &member;
 
     uint8_t buf[MESSAGE_MAX_SIZE];
@@ -107,9 +99,9 @@ void test_message_member_list_enc_dec() {
     message_header_init(&msg.header, MESSAGE_MEMBER_LIST_TYPE, 1);
 
     cluster_member_t member1;
-    assert(create_member(12345, &member1) == 0);
+    assert(create_test_member(12345, &member1) == 0);
     cluster_member_t member2;
-    assert(create_member(12346, &member2) == 0);
+    assert(create_test_member(12346, &member2) == 0);
     cluster_member_t members[] = { member1, member2 };
 
     msg.members_n = 2;
@@ -170,7 +162,7 @@ void test_message_data_enc_dec() {
     msg.data = (uint8_t *) data;
 
     cluster_member_t member;
-    assert(create_member(12345, &member) == 0);
+    assert(create_test_member(12345, &member) == 0);
 
     vector_clock_t clock;
     assert(vector_clock_init(&clock) == 0);
@@ -204,9 +196,9 @@ void test_message_status_enc_dec() {
     message_header_init(&msg.header, MESSAGE_STATUS_TYPE, 1);
 
     cluster_member_t member1;
-    assert(create_member(12345, &member1) == 0);
+    assert(create_test_member(12345, &member1) == 0);
     cluster_member_t member2;
-    assert(create_member(12346, &member2) == 0);
+    assert(create_test_member(12346, &member2) == 0);
 
     vector_clock_t clock;
     assert(vector_clock_init(&clock) == 0);
