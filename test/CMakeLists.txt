@@ -18,7 +18,7 @@ include_directories(../src)
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -std=gnu99")
 set(TEST_SHARED_SOURCE_FILES test_utils.c)
-set(TEST_SOURCE_FILES messages_test.c vector_clock_test.c)
+set(TEST_SOURCE_FILES messages_test.c vector_clock_test.c member_test.c)
 
 add_library(pittacus_test_obj OBJECT ${TEST_SHARED_SOURCE_FILES})
 

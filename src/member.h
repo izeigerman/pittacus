@@ -33,7 +33,6 @@ typedef struct cluster_member {
 } cluster_member_t;
 
 int cluster_member_init(cluster_member_t *result, const pt_sockaddr_storage *address, pt_socklen_t address_len);
-int cluster_member_copy(cluster_member_t *dst, cluster_member_t *src);
 int cluster_member_equals(cluster_member_t *first, cluster_member_t *second);
 void cluster_member_destroy(cluster_member_t *result);
 
@@ -57,7 +56,6 @@ int cluster_member_set_remove_by_addr(cluster_member_set_t *members,
                                       pt_socklen_t addr_size);
 size_t cluster_member_set_random_members(cluster_member_set_t *members,
                                          cluster_member_t **reservoir, size_t reservoir_size);
-void cluster_member_set_item_destroy(cluster_member_t *member);
 void cluster_member_set_destroy(cluster_member_set_t *members);
 
 #ifdef  __cplusplus
