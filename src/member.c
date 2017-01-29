@@ -34,7 +34,7 @@ int cluster_member_init(cluster_member_t *result, const pt_sockaddr_storage *add
     return PITTACUS_ERR_NONE;
 }
 
-int cluster_member_copy(cluster_member_t *dst, cluster_member_t *src) {
+static int cluster_member_copy(cluster_member_t *dst, cluster_member_t *src) {
     dst->uid = src->uid;
     dst->version = src->version;
     dst->address_len = src->address_len;
@@ -143,7 +143,7 @@ int cluster_member_set_put(cluster_member_set_t *members, cluster_member_t *new_
     return PITTACUS_ERR_NONE;
 }
 
-void cluster_member_set_item_destroy(cluster_member_t *member) {
+static void cluster_member_set_item_destroy(cluster_member_t *member) {
     if (member != NULL) {
         cluster_member_destroy(member);
         free(member);
