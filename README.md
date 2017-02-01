@@ -36,12 +36,12 @@ make install
 
 ## How to use
 First of all include the Pittacus header:
-```c_cpp
+```cpp
 #include <pittacus/gossip.h>
 ```
 
 Now instantiate a Pittacus descriptor with a `sockaddr` structure that represents an address of the current node and a data receiver callback:
-```c_cpp
+```cpp
 struct sockaddr_in self_in;
 self_in.sin_family = AF_INET;
 self_in.sin_port = htons(65000); // use 0 instead to pick up a random port
@@ -62,7 +62,7 @@ if (gossip == NULL) {
 ```
 
 The data receiver callback may look like following:
-```c_cpp
+```cpp
 void data_receiver(void *context, pittacus_gossip_t *gossip, const uint8_t *data, size_t data_size) {
     // This function is invoked every time when a new data arrives.
     printf("Data size is: %u\n", data_size);
@@ -70,7 +70,7 @@ void data_receiver(void *context, pittacus_gossip_t *gossip, const uint8_t *data
 ```
 
 It's time join a cluster. There are 2 ways to do this: 1) specify the list of seed nodes that are used as entry points to a cluster or 2) specify nothing if this instance is going to be a seed node in itself.
-```c_cpp
+```cpp
 // Provide a seed node destination address.
 struct sockaddr_in seed_node_in;
 seed_node_in.sin_family = AF_INET;
@@ -92,7 +92,7 @@ if (join_result < 0) {
 ```
 
 To force Pittacus to read a message from the network:
-```c_cpp
+```cpp
 recv_result = pittacus_gossip_process_receive(gossip);
 if (recv_result < 0) {
     fprintf(stderr, "Gossip receive failed: %d\n", recv_result);
@@ -102,7 +102,7 @@ if (recv_result < 0) {
 ```
 
 To flush the outbound messages to the network:
-```c_cpp
+```cpp
 send_result = pittacus_gossip_process_send(gossip);
 if (send_result < 0) {
     fprintf(stderr, "Gossip send failed: %d\n", recv_result);
@@ -112,18 +112,18 @@ if (send_result < 0) {
 ```
 
 In order to enable the anti-entropy in Pittacus you should periodically call the gossip tick function:
-```c_cpp
+```cpp
 int time_till_next_tick = pittacus_gossip_tick(gossip);
 ```
 This function returns a time period in milliseconds which indicates when the next tick should occur. Check out the code documentation for further details.
 
 To spread some data within a cluster:
-```c_cpp
+```cpp
 pittacus_gossip_send_data(gossip, data, data_size);
 ```
 
 Destroy a Pittacus descriptor:
-```c_cpp
+```cpp
 pittacus_gossip_destroy(gossip);
 ```
 
