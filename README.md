@@ -115,7 +115,7 @@ In order to enable the anti-entropy in Pittacus you should periodically call the
 ```cpp
 int time_till_next_tick = pittacus_gossip_tick(gossip);
 ```
-This function returns a time period in milliseconds which indicates when the next tick should occur. Check out the code documentation for further details.
+This function returns a time period in milliseconds which indicates when the next tick should occur. This time interval can be used to adjust yor `poll` or `select` timeout. Check out the code documentation for further details.
 
 To spread some data within a cluster:
 ```cpp
